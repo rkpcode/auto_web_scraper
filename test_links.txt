@@ -1,0 +1,6 @@
+# Test URLs for pipeline validation
+# Using publicly accessible test videos
+
+# Public domain test videos (no bot protection)
+https://www.youtube.com/watch?v=jNQXAC9IVRw
+https://www.youtube.com/watch?v=aqz-KE-bpKQ
