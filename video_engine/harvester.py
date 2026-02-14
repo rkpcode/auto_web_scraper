@@ -97,7 +97,7 @@ class BaseHarvester:
     
     def save_to_database(self, urls):
         """
-        Save discovered URLs to database as PENDING.
+        Save discovered URLs to database as PENDING using batch insert.
         
         Args:
             urls: Set of URLs to save
@@ -105,19 +105,15 @@ class BaseHarvester:
         Returns:
             int: Number of new URLs added
         """
-        new_count = 0
+        if not urls:
+            return 0
         
-        for url in urls:
-            try:
-                # Check if already exists
-                existing = db.get_pending_urls()
-                if url not in existing:
-                    db.insert_video(url)
-                    new_count += 1
-                    logger.info(f"[HARVESTER] Added: {url}")
-            except Exception as e:
-                logger.warning(f"[HARVESTER] Failed to add {url}: {e}")
+        logger.info(f"[HARVESTER] Saving {len(urls)} URLs to database (batch mode)...")
         
+        # Use batch insert for better performance
+        new_count = db.insert_videos_batch(urls, status='PENDING')
+        
+        logger.info(f"[HARVESTER] Successfully added {new_count} new URLs")
         return new_count
 
 

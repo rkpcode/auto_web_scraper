@@ -91,6 +91,49 @@ class DatabaseManager:
             # URL already exists
             return False
     
+    def insert_videos_batch(self, urls, status='PENDING', batch_size=100):
+        """
+        Insert multiple videos in batches for better performance.
+        
+        Args:
+            urls: List/set of URLs to insert
+            status: Initial status for all URLs
+            batch_size: Number of URLs per batch
+            
+        Returns:
+            int: Number of successfully inserted URLs
+        """
+        inserted_count = 0
+        urls_list = list(urls) if isinstance(urls, set) else urls
+        
+        with self.lock:
+            conn = sqlite3.connect(self.db_path, timeout=30.0)
+            cursor = conn.cursor()
+            
+            # Process in batches
+            for i in range(0, len(urls_list), batch_size):
+                batch = urls_list[i:i + batch_size]
+                now = datetime.now()
+                
+                # Prepare batch data
+                batch_data = [(url, status, now) for url in batch]
+                
+                try:
+                    cursor.executemany("""
+                        INSERT OR IGNORE INTO videos (original_url, status, created_at)
+                        VALUES (?, ?, ?)
+                    """, batch_data)
+                    inserted_count += cursor.rowcount
+                except Exception as e:
+                    # Log error but continue with next batch
+                    import logging
+                    logging.error(f"Batch insert error: {e}")
+            
+            conn.commit()
+            conn.close()
+        
+        return inserted_count
+    
     def update_status(self, url, status, **kwargs):
         """
         Thread-safe atomic status update with dynamic kwargs.
