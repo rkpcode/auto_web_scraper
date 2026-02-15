@@ -1,1 +1,10 @@
-viralkand.com
+# Video URLs for Automated Scraping
+# Add one URL per line (must include https://)
+# Lines starting with # are comments
+
+# Example (uncomment to use):
+# https://viralkand.com/
+# https://example.com/videos
+
+# Or use GitHub Actions manual trigger with website_url input
+

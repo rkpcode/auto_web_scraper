@@ -45,14 +45,37 @@ jobs:
           echo "BUNNY_LIBRARY_ID=${{ secrets.BUNNY_LIBRARY_ID }}" >> $GITHUB_ENV
           echo "MAX_WORKERS=2" >> $GITHUB_ENV
       
+      - name: Prepare links.txt
+        run: |
+          if [ ! -f "links.txt" ]; then
+            echo "Creating sample links.txt..."
+            cat > links.txt << 'EOF'
+          # Add your video URLs here, one per line
+          # Example:
+          # https://example.com/video1
+          # https://example.com/video2
+          EOF
+          fi
+          echo "✅ links.txt ready"
+          
       - name: Run video scraper
         run: |
-          cd video_engine
-          python main.py
+          # Check if links.txt has URLs
+          if grep -qv '^#' links.txt && grep -qv '^$' links.txt; then
+            echo "📋 Found URLs in links.txt"
+            cd video_engine
+            python main.py
+          else
+            echo "⚠️ No URLs found in links.txt"
+            echo "ℹ️ Add video URLs to links.txt to enable automated scraping"
+            echo "ℹ️ Or use manual workflow trigger with website_url input"
+            exit 0
+          fi
         continue-on-error: true
       
       - name: Upload database artifact
         uses: actions/upload-artifact@v4
+        if: always() && hashFiles('video_engine/video_tracker.db') != ''
         with:
           name: video-database-${{ github.run_number }}
           path: video_engine/video_tracker.db
@@ -60,7 +83,7 @@ jobs:
       
       - name: Upload logs
         uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && hashFiles('video_engine/pipeline.log') != ''
         with:
           name: pipeline-logs-${{ github.run_number }}
           path: video_engine/pipeline.log
