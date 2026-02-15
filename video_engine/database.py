@@ -15,7 +15,8 @@ class DatabaseManager:
     def _init_db(self):
         """Initialize database schema with WAL mode for better concurrency."""
         with self.lock:
-            conn = sqlite3.connect(self.db_path, timeout=30.0)
+            conn = sqlite3.connect(self.db_path, timeout=60.0, isolation_level='DEFERRED')
+            conn.execute('PRAGMA busy_timeout = 60000')  # 60 second busy timeout
             # Enable WAL mode for better concurrent access
             conn.execute('PRAGMA journal_mode=WAL')
             conn.execute('''
@@ -39,7 +40,8 @@ class DatabaseManager:
         DOWNLOADING/UPLOADING -> PENDING
         """
         with self.lock:
-            conn = sqlite3.connect(self.db_path, timeout=30.0)
+            conn = sqlite3.connect(self.db_path, timeout=60.0, isolation_level='DEFERRED')
+            conn.execute('PRAGMA busy_timeout = 60000')  # 60 second busy timeout
             cursor = conn.cursor()
             cursor.execute("""
                 UPDATE videos 
@@ -53,32 +55,37 @@ class DatabaseManager:
     
     def get_pending_urls(self):
         """Returns all PENDING or FAILED URLs for crash recovery."""
-        conn = sqlite3.connect(self.db_path, timeout=30.0)
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT original_url 
-            FROM videos 
-            WHERE status IN ('PENDING', 'FAILED')
-            ORDER BY created_at ASC
-        """)
-        urls = [row[0] for row in cursor.fetchall()]
-        conn.close()
-        return urls
+        with self.lock:
+            conn = sqlite3.connect(self.db_path, timeout=60.0, isolation_level='DEFERRED')
+            conn.execute('PRAGMA busy_timeout = 60000')  # 60 second busy timeout
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT original_url 
+                FROM videos 
+                WHERE status IN ('PENDING', 'FAILED')
+                ORDER BY created_at ASC
+            """)
+            urls = [row[0] for row in cursor.fetchall()]
+            conn.close()
+            return urls
     
     def get_video_status(self, url):
         """Check status of a video by URL."""
-        conn = sqlite3.connect(self.db_path, timeout=30.0)
-        cursor = conn.cursor()
-        cursor.execute("SELECT status FROM videos WHERE original_url = ?", (url,))
-        result = cursor.fetchone()
-        conn.close()
-        return result[0] if result else None
+        with self.lock:
+            conn = sqlite3.connect(self.db_path, timeout=60.0, isolation_level='DEFERRED')
+            conn.execute('PRAGMA busy_timeout = 60000')  # 60 second busy timeout
+            cursor = conn.cursor()
+            cursor.execute("SELECT status FROM videos WHERE original_url = ?", (url,))
+            result = cursor.fetchone()
+            conn.close()
+            return result[0] if result else None
     
     def insert_video(self, url, status='PENDING'):
         """Insert a new video record."""
         try:
             with self.lock:
-                conn = sqlite3.connect(self.db_path, timeout=30.0)
+                conn = sqlite3.connect(self.db_path, timeout=60.0, isolation_level='DEFERRED')
+                conn.execute('PRAGMA busy_timeout = 60000')  # 60 second busy timeout
                 cursor = conn.cursor()
                 cursor.execute("""
                     INSERT INTO videos (original_url, status, created_at) 
@@ -107,7 +114,8 @@ class DatabaseManager:
         urls_list = list(urls) if isinstance(urls, set) else urls
         
         with self.lock:
-            conn = sqlite3.connect(self.db_path, timeout=30.0)
+            conn = sqlite3.connect(self.db_path, timeout=60.0, isolation_level='DEFERRED')
+            conn.execute('PRAGMA busy_timeout = 60000')  # 60 second busy timeout
             cursor = conn.cursor()
             
             # Process in batches
@@ -140,7 +148,8 @@ class DatabaseManager:
         Example: update_status(url, 'COMPLETED', bunny_guid='xxx', local_filename='yyy')
         """
         with self.lock:
-            conn = sqlite3.connect(self.db_path, timeout=30.0)
+            conn = sqlite3.connect(self.db_path, timeout=60.0, isolation_level='DEFERRED')
+            conn.execute('PRAGMA busy_timeout = 60000')  # 60 second busy timeout
             cursor = conn.cursor()
             
             # Build dynamic UPDATE query
@@ -161,7 +170,8 @@ class DatabaseManager:
     def log_error(self, url, error_msg):
         """Mark video as FAILED with error details."""
         with self.lock:
-            conn = sqlite3.connect(self.db_path, timeout=30.0)
+            conn = sqlite3.connect(self.db_path, timeout=60.0, isolation_level='DEFERRED')
+            conn.execute('PRAGMA busy_timeout = 60000')  # 60 second busy timeout
             cursor = conn.cursor()
             cursor.execute("""
                 UPDATE videos 
@@ -173,16 +183,18 @@ class DatabaseManager:
     
     def get_stats(self):
         """Get status distribution for monitoring."""
-        conn = sqlite3.connect(self.db_path, timeout=30.0)
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT status, COUNT(*) 
-            FROM videos 
-            GROUP BY status
-        """)
-        stats = dict(cursor.fetchall())
-        conn.close()
-        return stats
+        with self.lock:
+            conn = sqlite3.connect(self.db_path, timeout=60.0, isolation_level='DEFERRED')
+            conn.execute('PRAGMA busy_timeout = 60000')  # 60 second busy timeout
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT status, COUNT(*) 
+                FROM videos 
+                GROUP BY status
+            """)
+            stats = dict(cursor.fetchall())
+            conn.close()
+            return stats
 
 
 # Singleton instance
