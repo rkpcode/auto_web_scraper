@@ -5,7 +5,7 @@ Simple interactive CLI for scraping videos from websites.
 ## Usage
 
 ```bash
-python interactive.py
+python interactive_pipeline.py
 ```
 
 ## Features
