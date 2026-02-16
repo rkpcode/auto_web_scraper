@@ -289,7 +289,8 @@ with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
     )
     
     # Auto-refresh stats every 5 seconds
-    app.load(get_live_stats, outputs=stats_display, every=5)
+    timer = gr.Timer(5)
+    timer.tick(get_live_stats, outputs=stats_display)
     
     with gr.Tab("Documentation"):
         gr.Markdown("""
