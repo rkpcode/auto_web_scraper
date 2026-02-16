@@ -17,6 +17,4 @@ tenacity>=8.2.0
 # Environment Variables
 python-dotenv>=1.0.0
 
-# UI (for Gradio app)
-gradio==4.8.0
-
+# Note: Gradio is installed by HF Spaces automatically (version 5.9.1)
