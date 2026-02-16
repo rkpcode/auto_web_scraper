@@ -1,7 +1,22 @@
-yt-dlp>=2023.10.0
+# Database
+psycopg2-binary==2.9.9
+
+# Video Processing
+yt-dlp>=2023.12.0
+playwright==1.40.0
+playwright-stealth==1.0.0
+
+# Web Scraping
 requests>=2.31.0
-tenacity>=8.2.0
 beautifulsoup4>=4.12.0
 lxml>=4.9.0
-playwright>=1.40.0
-playwright-stealth>=0.1.0
+
+# Retry Logic
+tenacity>=8.2.0
+
+# Environment Variables
+python-dotenv>=1.0.0
+
+# UI (for Gradio app)
+gradio==4.8.0
+

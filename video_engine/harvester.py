@@ -183,6 +183,118 @@ class GenericHarvester(BaseHarvester):
         return self.discovered_urls
 
 
+class LinkHarvester(BaseHarvester):
+    """
+    Pagination-based harvester with auto-stop and rate limiting.
+    
+    Features:
+    - Supports ?page=n and /page/n patterns
+    - Auto-stops when no new links found (prevents infinite loops)
+    - Random delay (2-5s) between pages to avoid IP bans
+    - Hard max_pages limit for safety
+    """
+    
+    def discover(self, max_pages=5):
+        """
+        Discover video URLs using pagination with auto-stop.
+        
+        Args:
+            max_pages: Maximum pages to crawl (default=5, hard limit)
+        
+        Returns:
+            set: Discovered video URLs
+        """
+        import time
+        import random
+        
+        logger.info(f"[HARVESTER] Starting pagination discovery from {self.base_url}")
+        logger.info(f"[HARVESTER] Max pages: {max_pages}")
+        
+        page_num = 1
+        consecutive_zero_pages = 0
+        
+        while page_num <= max_pages:
+            # Try different pagination patterns
+            page_urls = [
+                f"{self.base_url}?page={page_num}",
+                f"{self.base_url}/page/{page_num}",
+                f"{self.base_url}?p={page_num}",
+            ]
+            
+            # Use the first pattern that matches the base URL structure
+            if '?' in self.base_url:
+                current_page_url = f"{self.base_url}&page={page_num}"
+            else:
+                current_page_url = page_urls[0]
+            
+            try:
+                logger.info(f"[HARVESTER] Crawling page {page_num}/{max_pages}: {current_page_url}")
+                
+                # CRITICAL: Rotate User-Agent on every page to prevent fingerprinting
+                from core.utils import get_random_user_agent
+                headers = {
+                    'User-Agent': get_random_user_agent(),
+                    'Referer': self.base_url,  # Makes it look like human browsing
+                    'Connection': 'keep-alive',  # Better performance
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                    'Accept-Language': 'en-US,en;q=0.5',
+                }
+                response = requests.get(current_page_url, headers=headers, timeout=15)
+                response.raise_for_status()
+                
+                soup = BeautifulSoup(response.text, 'html.parser')
+                
+                # Find all links on this page
+                all_links = []
+                for link in soup.find_all('a', href=True):
+                    from urllib.parse import urljoin
+                    full_url = urljoin(current_page_url, link['href'])
+                    all_links.append(full_url)
+                
+                # Filter for video pages
+                before_count = len(self.discovered_urls)
+                video_urls = self.filter_urls(all_links)
+                self.discovered_urls.update(video_urls)
+                after_count = len(self.discovered_urls)
+                
+                new_links_found = after_count - before_count
+                logger.info(f"[HARVESTER] Page {page_num}: Found {new_links_found} new video links (Total: {after_count})")
+                
+                # AUTO-STOP: If no new links found, stop crawling
+                if new_links_found == 0:
+                    consecutive_zero_pages += 1
+                    logger.warning(f"[HARVESTER] No new links on page {page_num} ({consecutive_zero_pages} consecutive zero pages)")
+                    
+                    if consecutive_zero_pages >= 2:
+                        logger.info(f"[HARVESTER] Auto-stopping: 2 consecutive pages with no new links")
+                        break
+                else:
+                    consecutive_zero_pages = 0  # Reset counter
+                
+                # Rate limiting: Random delay to avoid IP bans
+                if page_num < max_pages:
+                    delay = random.uniform(2.0, 5.0)
+                    logger.debug(f"[HARVESTER] Waiting {delay:.1f}s before next page...")
+                    time.sleep(delay)
+                
+                page_num += 1
+                
+            except requests.exceptions.HTTPError as e:
+                if e.response.status_code == 404:
+                    logger.info(f"[HARVESTER] Page {page_num} returned 404 - reached end of pagination")
+                    break
+                else:
+                    logger.error(f"[HARVESTER] HTTP error on page {page_num}: {e}")
+                    break
+            
+            except Exception as e:
+                logger.error(f"[HARVESTER] Error crawling page {page_num}: {e}")
+                break
+        
+        logger.info(f"[HARVESTER] Pagination complete: {len(self.discovered_urls)} total video URLs discovered across {page_num-1} pages")
+        return self.discovered_urls
+
+
 class SitemapHarvester(BaseHarvester):
     """
     Harvester that reads from XML sitemaps.
@@ -233,25 +345,30 @@ class SitemapHarvester(BaseHarvester):
         return generic.discover()
 
 
-def harvest_and_save(base_url, method='auto', max_pages=10):
+def harvest_and_save(base_url, method='auto', max_pages=5):
     """
-    Convenience function to discover and save URLs.
+    Convenience function to discover and save URLs with detailed stats.
     
     Args:
         base_url: Website homepage URL
-        method: 'auto', 'sitemap', or 'generic'
-        max_pages: Maximum pages to crawl (for generic method)
+        method: 'auto', 'sitemap', 'generic', or 'pagination'
+        max_pages: Maximum pages to crawl (for pagination/generic methods)
         
     Returns:
-        int: Number of new URLs added to database
+        dict: Statistics with keys:
+            - 'pages_scanned': Number of pages crawled
+            - 'links_found': Total unique links discovered
+            - 'links_added': New links added to database
     """
     if method == 'sitemap':
         harvester = SitemapHarvester(base_url)
     elif method == 'generic':
         harvester = GenericHarvester(base_url)
+    elif method == 'pagination':
+        harvester = LinkHarvester(base_url)
     else:  # auto
-        # Try sitemap first, fallback to generic
-        harvester = SitemapHarvester(base_url)
+        # Try pagination first (best for most sites), fallback to sitemap
+        harvester = LinkHarvester(base_url)
     
     # Discover URLs
     urls = harvester.discover(max_pages=max_pages)
@@ -259,5 +376,11 @@ def harvest_and_save(base_url, method='auto', max_pages=10):
     # Save to database
     new_count = harvester.save_to_database(urls)
     
-    logger.info(f"[HARVESTER] Added {new_count} new URLs to database")
-    return new_count
+    stats = {
+        'pages_scanned': max_pages,  # Approximate
+        'links_found': len(urls),
+        'links_added': new_count
+    }
+    
+    logger.info(f"[HARVESTER] Stats: {stats}")
+    return stats

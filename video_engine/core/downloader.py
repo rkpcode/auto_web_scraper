@@ -45,6 +45,10 @@ class VideoDownloader:
             'socket_timeout': 30,
             'retries': 3,
             'http_headers': headers,
+            # CRITICAL: Prevent RAM spikes during 4K video muxing
+            'buffersize': 16384,  # 16KB buffer (prevents memory bloat)
+            'fragment_retries': 10,  # Retry fragments on failure
+            'http_chunk_size': 10485760,  # 10MB chunks (prevents large memory allocation)
         }
         
         # Add proxy if configured

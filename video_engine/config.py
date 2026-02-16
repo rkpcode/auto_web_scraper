@@ -1,51 +1,92 @@
 import os
 
-# Bunny Stream API Configuration
+# ============================================================================
+# DATABASE CONFIGURATION (Supabase PostgreSQL)
+# ============================================================================
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise ValueError(
+        "DATABASE_URL environment variable must be set. "
+        "Get it from Supabase: Settings > Database > Connection String (URI)"
+    )
+
+# CRITICAL: Add connection timeout to handle HF Spaces latency spikes
+# Supabase shared environment can have variable latency
+if "connect_timeout" not in DATABASE_URL:
+    import logging
+    logging.warning(
+        "⚠️  DATABASE_URL missing connect_timeout parameter. "
+        "Add '?connect_timeout=10' to prevent hanging connections."
+    )
+
+# ============================================================================
+# BUNNY STREAM API CONFIGURATION
+# ============================================================================
 BUNNY_API_KEY = os.getenv("BUNNY_API_KEY", "")
 BUNNY_LIBRARY_ID = os.getenv("BUNNY_LIBRARY_ID", "")
 BUNNY_BASE_URL = "https://video.bunnycdn.com/library"
 
-# Project Paths (Colab-compatible with Drive mount)
+# ============================================================================
+# PROJECT PATHS
+# ============================================================================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Check if running on Colab and Drive is mounted
-if os.path.exists("/content/drive/MyDrive"):
-    # Colab environment with Drive mounted
-    DRIVE_BASE = "/content/drive/MyDrive/video_engine_data"
-    os.makedirs(DRIVE_BASE, exist_ok=True)
-    DB_PATH = os.path.join(DRIVE_BASE, "video_tracker.db")
-    LOG_FILE_PATH = os.path.join(DRIVE_BASE, "pipeline.log")
-else:
-    # Local environment
-    DB_PATH = os.path.join(BASE_DIR, "video_tracker.db")
-    LOG_FILE_PATH = os.path.join(BASE_DIR, "pipeline.log")
-
+# Temporary storage for downloads (cleaned after upload)
 TEMP_STORAGE_DIR = os.path.join(BASE_DIR, "temp_storage")
 os.makedirs(TEMP_STORAGE_DIR, exist_ok=True)
 
-# URLs to process
-LINKS_FILE = os.path.join(BASE_DIR, "links.txt")
+# Logging
+LOG_FILE_PATH = os.path.join(BASE_DIR, "pipeline.log")
 
-# Concurrency settings
-_MAX_WORKERS_RAW = int(os.getenv("MAX_WORKERS", "4"))
+# ============================================================================
+# CONCURRENCY SETTINGS (HF Spaces Optimized)
+# ============================================================================
+# CRITICAL: HF Spaces Free Tier has 16GB RAM limit
+# Formula: Total RAM ≈ Gradio (1GB) + Harvester×Browser (800MB) + Workers×Cache (500MB each)
+# 
+# With MAX_WORKERS=2: ~1GB + 800MB + 1GB = 2.8GB (Safe)
+# With MAX_WORKERS=4: ~1GB + 800MB + 2GB = 3.8GB (Risky during discovery)
 
-# Browser extractor settings
-USE_BROWSER_FOR_PROTECTED_SITES = os.getenv("USE_BROWSER", "true").lower() == "true"
-BROWSER_HEADLESS = True  # Always True for Colab/production
+MAX_WORKERS = 2  # HARD LIMIT for HF Spaces
 
-# CRITICAL: Auto-reduce workers when browser is enabled to prevent OOM crashes
-# Each browser instance uses 400-600MB RAM
-# Colab Free tier: ~12GB RAM total
-if USE_BROWSER_FOR_PROTECTED_SITES:
-    MAX_WORKERS = min(_MAX_WORKERS_RAW, 2)  # Force max 2 workers with browser
-    if _MAX_WORKERS_RAW > 2:
-        import logging
-        logging.warning(f"⚠️  MAX_WORKERS reduced from {_MAX_WORKERS_RAW} to {MAX_WORKERS} (browser mode enabled)")
+# Override from environment (but cap at 2 for safety)
+_MAX_WORKERS_ENV = int(os.getenv("MAX_WORKERS", "2"))
+if _MAX_WORKERS_ENV > 2:
+    import logging
+    logging.warning(f"⚠️  MAX_WORKERS={_MAX_WORKERS_ENV} exceeds safe limit. Capping at 2 for HF Spaces.")
+    MAX_WORKERS = 2
 else:
-    MAX_WORKERS = _MAX_WORKERS_RAW
+    MAX_WORKERS = _MAX_WORKERS_ENV
 
-# Proxy settings (optional)
+# ============================================================================
+# BROWSER EXTRACTOR SETTINGS
+# ============================================================================
+USE_BROWSER_FOR_PROTECTED_SITES = os.getenv("USE_BROWSER", "true").lower() == "true"
+BROWSER_HEADLESS = True  # Always True for production/HF Spaces
+
+# ============================================================================
+# HARVESTER PAGINATION SETTINGS
+# ============================================================================
+DEFAULT_MAX_PAGES = int(os.getenv("DEFAULT_MAX_PAGES", "5"))
+PAGINATION_DELAY_MIN = float(os.getenv("PAGINATION_DELAY_MIN", "2.0"))
+PAGINATION_DELAY_MAX = float(os.getenv("PAGINATION_DELAY_MAX", "5.0"))
+
+# ============================================================================
+# PROXY SETTINGS (Optional)
+# ============================================================================
 PROXY_URL = os.getenv("PROXY_URL", None)
 
-# Disk management
+# ============================================================================
+# DISK MANAGEMENT
+# ============================================================================
 MIN_FREE_DISK_GB = 5  # Minimum free disk space in GB
+
+# ============================================================================
+# HF SPACES DETECTION
+# ============================================================================
+IS_HF_SPACES = bool(os.getenv("SPACE_ID"))
+if IS_HF_SPACES:
+    import logging
+    logging.warning("🚀 Running on Hugging Face Spaces - Optimizations enabled")
+    logging.warning(f"   MAX_WORKERS: {MAX_WORKERS}")
+    logging.warning(f"   Database: Supabase (PostgreSQL)")
