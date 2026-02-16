@@ -9,7 +9,7 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
 import re
 from core.logger import logger
-from database import db
+from video_engine.database_supabase import db
 
 
 class BaseHarvester:
