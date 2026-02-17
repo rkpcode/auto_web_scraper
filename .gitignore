@@ -1,60 +1,53 @@
-# Byte-compiled / optimized / DLL files
+# Ignore Python cache
 __pycache__/
 *.py[cod]
 *$py.class
-
-# C extensions
 *.so
 
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# Virtual environments
+# Ignore environment files
 .env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
+.env.local
+.env.*.local
 
-# IDE
+# Ignore test files
+test_*.py
+*_test.py
+
+# Ignore logs
+*.log
+pipeline.log
+
+# Ignore temp storage
+temp_storage/
+*.mp4
+*.webm
+*.avi
+
+# Ignore database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Ignore documentation (not needed in HF Space)
+*.md
+!README.md
+!README_SPACES.md
+
+# Ignore IDE files
 .vscode/
 .idea/
 *.swp
 *.swo
-*~
 
-# Project-specific
-temp_downloads/
-temp_storage/
-*.db
-*.db-shm
-*.db-wal
-*.db-journal
-*.log
-pipeline.log
+# Ignore git
+.git/
+.gitignore
 
-# Test files
-test_*.py
-test_*.txt
-kb_links.txt
-
-# OS
-.DS_Store
-Thumbs.db
+# Ignore local testing
+.env.example
+schema.sql
+DEPLOYMENT_CHECKLIST.md
+PRODUCTION_HARDENING.md
+/venv
+# Ignore brain artifacts
+.gemini/

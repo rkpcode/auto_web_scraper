@@ -8,7 +8,7 @@ This is the "pro-level" solution for heavily protected sites like:
 """
 import re
 from playwright.sync_api import sync_playwright
-from playwright_stealth import Stealth
+from playwright_stealth import stealth_sync
 from extractors.base_extractor import BaseExtractor
 from core.logger import logger
 from core.exceptions import ExtractionError
@@ -66,8 +66,8 @@ class BrowserExtractor(BaseExtractor):
                 page = context.new_page()
                 
                 # Apply stealth patches to hide automation
-                stealth = Stealth()
-                stealth.apply_stealth_sync(page)
+                # Apply stealth patches to hide automation
+                stealth_sync(page)
                 
                 # Network request interception
                 intercepted_urls = []

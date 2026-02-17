@@ -135,7 +135,14 @@ class SupabaseManager:
             inserted_count = cursor.rowcount
         
         logger.info(f"[SUPABASE] Successfully added {inserted_count} new URLs (skipped {len(links_list) - inserted_count} duplicates)")
+        logger.info(f"[SUPABASE] Successfully added {inserted_count} new URLs (skipped {len(links_list) - inserted_count} duplicates)")
         return inserted_count
+    
+    def insert_videos_batch(self, links, status='PENDING'):
+        """
+        Alias for bulk_seed_links to maintain compatibility with Harvester.
+        """
+        return self.bulk_seed_links(links, status)
     
     def get_pending_videos(self):
         """
