@@ -207,9 +207,16 @@ class BrowserExtractor(BaseExtractor):
                     if intercepted_urls:
                         video_url = intercepted_urls[0]
                         logger.info(f"🚀 [BROWSER] Video found! Exiting early ({len(intercepted_urls)} intercepted)")
+                        
+                        # Capture title BEFORE closing
+                        try:
+                            page_title = page.title()
+                        except:
+                            page_title = "Untitled Video"
+                            
                         # CRITICAL: Close browser immediately to free RAM
                         browser.close()
-                        return video_url, page.title()
+                        return video_url, page_title
                     
                     # B. Try Clicking with JavaScript (Bypass Overlays)
                     for selector in play_selectors:
