@@ -239,11 +239,27 @@ class BrowserExtractor(BaseExtractor):
                     if not valid_urls:
                         raise ExtractionError("Only ad/banner videos found", url=url)
 
-                    # Priority: .mp4 > .m3u8 > others
+                    # Priority 1: .mp4 files that match the site domain (Highest confidence)
+                    # This ensures we get the "main" video from the site's CDN, not a 3rd party ad
+                    site_domain = url.split('/')[2].replace('www.', '').split('.')[0] # e.g. "thekamababa"
+                    domain_mp4s = [u for u in valid_urls if '.mp4' in u.lower() and site_domain in u.lower()]
+                    
+                    # Priority 2: Any .mp4 file
                     mp4_urls = [u for u in valid_urls if '.mp4' in u.lower()]
+                    
+                    # Priority 3: .m3u8 files
                     m3u8_urls = [u for u in valid_urls if '.m3u8' in u.lower()]
                     
-                    video_url = mp4_urls[0] if mp4_urls else (m3u8_urls[0] if m3u8_urls else valid_urls[0])
+                    # Selection Logic
+                    if domain_mp4s:
+                        video_url = domain_mp4s[0]
+                        logger.info(f"[SELECT] Prioritizing domain-matched video: {video_url[:100]}...")
+                    elif mp4_urls:
+                        video_url = mp4_urls[0]
+                    elif m3u8_urls:
+                        video_url = m3u8_urls[0]
+                    else:
+                        video_url = valid_urls[0]
                     
                     logger.info(f"[SUCCESS] Extracted: {video_url[:100]}...")
                     return video_url, title
