@@ -8,7 +8,7 @@ This is the "pro-level" solution for heavily protected sites like:
 """
 import re
 from playwright.sync_api import sync_playwright
-from playwright_stealth import stealth_sync
+# removed broken playwright-stealth dependency
 from extractors.base_extractor import BaseExtractor
 from core.logger import logger
 from core.exceptions import ExtractionError
@@ -19,7 +19,7 @@ class BrowserExtractor(BaseExtractor):
     Extractor that uses headless browser to bypass bot protection.
     
     Features:
-    - Playwright Stealth (hides automation fingerprints)
+    - Manual Stealth Implementation (hides automation fingerprints)
     - Network Request Interception (captures video URLs)
     - Popup/Ad Blocking
     """
@@ -35,6 +35,53 @@ class BrowserExtractor(BaseExtractor):
         self.headless = headless
         self.timeout = timeout
     
+    def _apply_stealth(self, page):
+        """
+        Apply stealth scripts to hide automation.
+        Replaces playwright-stealth to avoid import errors.
+        """
+        # 1. Override navigator.webdriver
+        page.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => undefined
+            });
+        """)
+        
+        # 2. Mock chrome object
+        page.add_init_script("""
+            window.chrome = {
+                app: { isInstalled: false },
+                runtime: { 
+                    OnInstalledReason: { INSTALL: 'install' },
+                    PlatformOs: { WIN: 'win' }
+                }
+            };
+        """)
+        
+        # 3. Pass plugins check
+        page.add_init_script("""
+            Object.defineProperty(navigator, 'plugins', {
+                get: () => [1, 2, 3]
+            });
+        """)
+        
+        # 4. Pass languages check
+        page.add_init_script("""
+            Object.defineProperty(navigator, 'languages', {
+                get: () => ['en-US', 'en']
+            });
+        """)
+        
+        # 5. Permission overrides
+        page.add_init_script("""
+            const originalQuery = window.navigator.permissions.query;
+            window.navigator.permissions.query = (parameters) => (
+                parameters.name === 'notifications' ?
+                Promise.resolve({ state: 'denied' }) :
+                originalQuery(parameters)
+            );
+        """)
+
     def extract(self, url):
         """
         Extract video URL using browser automation + network interception.
@@ -52,7 +99,7 @@ class BrowserExtractor(BaseExtractor):
             logger.info(f"[BROWSER] Launching headless browser for {url}")
             
             with sync_playwright() as p:
-                # Launch browser with stealth
+                # Launch browser
                 browser = p.chromium.launch(headless=self.headless)
                 
                 # Create context with realistic fingerprint
@@ -65,36 +112,44 @@ class BrowserExtractor(BaseExtractor):
                 
                 page = context.new_page()
                 
-                # Apply stealth patches to hide automation
-                # Apply stealth patches to hide automation
-                stealth_sync(page)
+                # Apply manual stealth
+                self._apply_stealth(page)
                 
                 # Network request interception
                 intercepted_urls = []
                 
                 def handle_response(response):
                     """Capture video file requests"""
-                    url_lower = response.url.lower()
-                    
-                    # Check for video patterns
-                    if any(pattern in url_lower for pattern in ['.mp4', '.m3u8', '/stream', '/video', '.ts']):
-                        # Filter out ads and tracking
-                        if not any(bad in url_lower for bad in ['analytics', 'pixel', 'track', 'ad.', 'ads.']):
-                            intercepted_urls.append(response.url)
-                            logger.info(f"[INTERCEPT] Found: {response.url[:80]}...")
+                    try:
+                        url_lower = response.url.lower()
+                        
+                        # Check for video patterns
+                        if any(pattern in url_lower for pattern in ['.mp4', '.m3u8', '/stream', '/video', '.ts']):
+                            # Filter out ads and tracking
+                            if not any(bad in url_lower for bad in ['analytics', 'pixel', 'track', 'ad.', 'ads.']):
+                                intercepted_urls.append(response.url)
+                                logger.info(f"[INTERCEPT] Found: {response.url[:80]}...")
+                    except Exception:
+                        pass
                 
                 page.on("response", handle_response)
                 
                 # Block ads and popups
-                page.route("**/*", lambda route: (
-                    route.abort() if any(ad in route.request.url for ad in 
-                        ['doubleclick', 'googlesyndication', 'adserver', 'popads'])
-                    else route.continue_()
-                ))
+                try:
+                    page.route("**/*", lambda route: (
+                        route.abort() if any(ad in route.request.url for ad in 
+                            ['doubleclick', 'googlesyndication', 'adserver', 'popads'])
+                        else route.continue_()
+                    ))
+                except Exception:
+                    pass
                 
                 # Navigate to page
                 logger.info(f"[BROWSER] Navigating to page...")
-                page.goto(url, wait_until="domcontentloaded", timeout=self.timeout)
+                try:
+                    page.goto(url, wait_until="domcontentloaded", timeout=self.timeout)
+                except Exception as e:
+                    logger.warning(f"[BROWSER] Navigation warning: {e}")
                 
                 # Extract title
                 try:
