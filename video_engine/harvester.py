@@ -83,6 +83,7 @@ class BaseHarvester:
                 '/category/', '/tag/', '/author/', '/page/',
                 '/search/', '/login/', '/register/', '/contact/',
                 '/dmca/', '/terms/', '/privacy/', '/about/',
+                '/18-u-s-c/', '/compliance/', '/cookie/',
                 '.jpg', '.png', '.gif', '.css', '.js'
             ]
             

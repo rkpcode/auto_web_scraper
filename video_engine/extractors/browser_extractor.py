@@ -99,15 +99,24 @@ class BrowserExtractor(BaseExtractor):
             logger.info(f"[BROWSER] Launching headless browser for {url}")
             
             with sync_playwright() as p:
-                # Launch browser
-                browser = p.chromium.launch(headless=self.headless)
+                # Launch browser with autoplay enabled
+                browser = p.chromium.launch(
+                    headless=self.headless,
+                    args=[
+                        '--autoplay-policy=no-user-gesture-required',
+                        '--mute-audio',
+                        '--disable-web-security',
+                        '--disable-features=IsolateOrigins,site-per-process'
+                    ]
+                )
                 
                 # Create context with realistic fingerprint
                 context = browser.new_context(
                     user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                     viewport={'width': 1920, 'height': 1080},
                     locale='en-US',
-                    timezone_id='America/New_York'
+                    timezone_id='America/New_York',
+                    device_scale_factor=1,
                 )
                 
                 page = context.new_page()
@@ -122,34 +131,24 @@ class BrowserExtractor(BaseExtractor):
                     """Capture video file requests"""
                     try:
                         url_lower = response.url.lower()
-                        
                         # Check for video patterns
-                        if any(pattern in url_lower for pattern in ['.mp4', '.m3u8', '/stream', '/video', '.ts']):
-                            # Filter out ads and tracking
-                            if not any(bad in url_lower for bad in ['analytics', 'pixel', 'track', 'ad.', 'ads.']):
-                                intercepted_urls.append(response.url)
-                                logger.info(f"[INTERCEPT] Found: {response.url[:80]}...")
+                        if any(pattern in url_lower for pattern in ['.mp4', '.m3u8', '.ts', 'master.json', 'manifest']):
+                            if not any(bad in url_lower for bad in ['analytics', 'pixel', 'track', 'ad.', 'ads.', 'favicon']):
+                                # Deduplicate
+                                if response.url not in intercepted_urls:
+                                    intercepted_urls.append(response.url)
+                                    logger.info(f"[INTERCEPT] Found: {response.url[:100]}...")
                     except Exception:
                         pass
                 
                 page.on("response", handle_response)
-                
-                # Block ads and popups
-                try:
-                    page.route("**/*", lambda route: (
-                        route.abort() if any(ad in route.request.url for ad in 
-                            ['doubleclick', 'googlesyndication', 'adserver', 'popads'])
-                        else route.continue_()
-                    ))
-                except Exception:
-                    pass
                 
                 # Navigate to page
                 logger.info(f"[BROWSER] Navigating to page...")
                 try:
                     page.goto(url, wait_until="domcontentloaded", timeout=self.timeout)
                 except Exception as e:
-                    logger.warning(f"[BROWSER] Navigation warning: {e}")
+                    logger.warning(f"[BROWSER] Navigation warning: {str(e)}")
                 
                 # Extract title
                 try:
@@ -157,34 +156,88 @@ class BrowserExtractor(BaseExtractor):
                 except:
                     title = "Untitled"
                 
-                # Wait for video player to load and trigger requests
-                logger.info(f"[BROWSER] Waiting for video player...")
-                page.wait_for_timeout(5000)  # Give JS time to load video
-                
-                # Try to click play button if exists (triggers video load)
+                # --- FAST FAIL CHECK ---
+                # Check if this is a Category/Archive page to avoid waiting 15s
                 try:
-                    play_button = page.locator('button:has-text("Play"), .play-button, #play-button').first
-                    if play_button.is_visible(timeout=2000):
-                        play_button.click()
-                        page.wait_for_timeout(3000)
+                    # 1. Check body classes for archive markers
+                    body_class = page.get_attribute("body", "class") or ""
+                    if any(c in body_class.lower() for c in ['archive', 'category', 'tag', 'search-results']):
+                        raise ExtractionError(f"Skipping non-video page (Body class: {body_class})", url=url)
+                    
+                    # 2. Check title for "Category" or "Tag"
+                    if any(k in title.lower() for k in ['category', 'tag', 'archive', 'search']):
+                        # Double check we don't have a player
+                        if page.locator('video, iframe').count() == 0:
+                            raise ExtractionError(f"Skipping non-video page (Title: {title})", url=url)
+                except ExtractionError:
+                    raise
+                except Exception:
+                    pass  # Continue if check fails
+                
+                # --- AGGRESSIVE VIDEO START LOGIC ---
+                logger.info(f"[BROWSER] Attempting to trigger video playback...")
+                
+                # 1. Wait for common player containers
+                try:
+                    page.wait_for_selector('video, iframe, .player, #player', timeout=8000)
                 except:
-                    pass  # No play button or already playing
+                    logger.warning("[BROWSER] No obvious player element found")
+
+                # 2. Try clicking play buttons (generic + specific)
+                play_selectors = [
+                    'button[aria-label="Play"]', 
+                    '.vjs-big-play-button', 
+                    '.jw-display-icon-container',
+                    '.mejs-overlay-play',
+                    'button:has-text("Play")',
+                    '.play-button',
+                    '#play-button',
+                    'video'
+                ]
+                
+                for selector in play_selectors:
+                    try:
+                        elements = page.locator(selector).all()
+                        for el in elements:
+                            if el.is_visible():
+                                logger.info(f"[BROWSER] Clicking play selector: {selector}")
+                                el.click(timeout=1000)
+                                page.wait_for_timeout(500)
+                    except:
+                        pass
+                
+                # 3. Iframe handling: Try to click inside iframes
+                for frame in page.frames:
+                    try:
+                        if frame != page.main_frame:
+                            play_btn = frame.locator('.vjs-big-play-button, button[aria-label="Play"]').first
+                            if play_btn.is_visible():
+                                logger.info("[BROWSER] Clicking play button in iframe")
+                                play_btn.click(timeout=1000)
+                    except:
+                        pass
+
+                # 4. Wait for network requests to populate
+                logger.info(f"[BROWSER] Waiting 15s for media requests...")
+                page.wait_for_timeout(15000)
                 
                 browser.close()
                 
                 # Select best video URL
                 if intercepted_urls:
-                    # Prefer .mp4 over .m3u8
+                    # Priority: .mp4 > .m3u8 > others
                     mp4_urls = [u for u in intercepted_urls if '.mp4' in u.lower()]
-                    video_url = mp4_urls[0] if mp4_urls else intercepted_urls[0]
+                    m3u8_urls = [u for u in intercepted_urls if '.m3u8' in u.lower()]
                     
-                    logger.info(f"[SUCCESS] Extracted: {video_url[:80]}...")
+                    video_url = mp4_urls[0] if mp4_urls else (m3u8_urls[0] if m3u8_urls else intercepted_urls[0])
+                    
+                    logger.info(f"[SUCCESS] Extracted: {video_url[:100]}...")
                     return video_url, title
                 else:
                     raise ExtractionError(
                         "No video URLs intercepted",
                         url=url,
-                        details="Network monitoring found no .mp4/.m3u8 requests"
+                        details="Network monitoring found no .mp4/.m3u8 requests after aggressive playback attempt"
                     )
         
         except ExtractionError:
