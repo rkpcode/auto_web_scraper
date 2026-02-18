@@ -143,9 +143,19 @@ class BrowserExtractor(BaseExtractor):
                         url_lower = response.url.lower()
                         # Check for video patterns
                         if any(pattern in url_lower for pattern in ['.mp4', '.m3u8', '.ts', 'master.json', 'manifest']):
+                            # 1. Generic Exclusion
                             if not any(bad in url_lower for bad in ['analytics', 'pixel', 'track', 'ad.', 'ads.', 'favicon']):
-                                # Stronger Ad Filter: Skip common ad video sizes/names immediately
-                                if any(x in url_lower for x in ['300x250', 'banner', 'preview', 'intro', 'outros', 'b.b.js']):
+                                # 2. Explicit Domain Blacklist (User Requested)
+                                # dscgirls.live = Live cam ads
+                                # aucdn.net = Secondary ad stream
+                                # tsyndicate = Ad network
+                                # storagexhd = Ad storage
+                                if any(bad_domain in url_lower for bad_domain in ['dscgirls.live', 'aucdn.net', 'tsyndicate', 'storagexhd', 'b.b.js']):
+                                    # logger.debug(f"[FILTER] Ignored blacklisted domain: {response.url[:50]}...")
+                                    return
+
+                                # 3. Stronger Ad Filter: Skip common ad video sizes/names immediately
+                                if any(x in url_lower for x in ['300x250', 'banner', 'preview', 'intro', 'outros']):
                                     # logger.debug(f"[FILTER] Ignored ad: {response.url[:50]}...")
                                     return
 
@@ -164,6 +174,34 @@ class BrowserExtractor(BaseExtractor):
                     page.goto(url, wait_until="domcontentloaded", timeout=self.timeout)
                 except Exception as e:
                     logger.warning(f"[BROWSER] Navigation warning: {str(e)}")
+                
+                # 1. Check if video is already intercepted (Fast Success)
+                page.wait_for_timeout(2000)
+                if intercepted_urls:
+                    logger.info(f"[BROWSER] Early video detection: {len(intercepted_urls)} found")
+
+                # 2. Aggressive Playback Trigger (Clicking common players)
+                logger.info(f"[BROWSER] Attempting to trigger video playback...")
+                try:
+                    # Specific selectors for known sites + generic fallbacks
+                    play_selectors = [
+                        'button.vjs-big-play-button',       # VideoJS
+                        '.jw-display-icon-container',       # JWPlayer
+                        '.fp-ui',                           # FlowPlayer
+                        '.play-button',                     # Generic
+                        '#play-button',
+                        'div.player-mobile-play-button',    # Common mobile overlay
+                        'a.thumb-link',                     # Click thumbnail to play
+                        'video', 
+                        'iframe'
+                    ]
+                    for selector in play_selectors:
+                        if page.locator(selector).first.is_visible(timeout=500):
+                            logger.info(f"[BROWSER] Clicking play selector: {selector}")
+                            page.locator(selector).first.click(timeout=500, force=True)
+                            page.wait_for_timeout(1000) # Wait for request to fire
+                except Exception:
+                    pass
                 
                 # Extract title
                 try:
