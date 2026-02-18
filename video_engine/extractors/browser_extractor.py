@@ -144,6 +144,11 @@ class BrowserExtractor(BaseExtractor):
                         # Check for video patterns
                         if any(pattern in url_lower for pattern in ['.mp4', '.m3u8', '.ts', 'master.json', 'manifest']):
                             if not any(bad in url_lower for bad in ['analytics', 'pixel', 'track', 'ad.', 'ads.', 'favicon']):
+                                # Stronger Ad Filter: Skip common ad video sizes/names immediately
+                                if any(x in url_lower for x in ['300x250', 'banner', 'preview', 'intro', 'outros', 'b.b.js']):
+                                    # logger.debug(f"[FILTER] Ignored ad: {response.url[:50]}...")
+                                    return
+
                                 # Deduplicate
                                 if response.url not in intercepted_urls:
                                     intercepted_urls.append(response.url)
