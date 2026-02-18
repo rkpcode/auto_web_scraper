@@ -180,28 +180,55 @@ class BrowserExtractor(BaseExtractor):
                 if intercepted_urls:
                     logger.info(f"[BROWSER] Early video detection: {len(intercepted_urls)} found")
 
-                # 2. Aggressive Playback Trigger (Clicking common players)
-                logger.info(f"[BROWSER] Attempting to trigger video playback...")
-                try:
-                    # Specific selectors for known sites + generic fallbacks
-                    play_selectors = [
-                        'button.vjs-big-play-button',       # VideoJS
-                        '.jw-display-icon-container',       # JWPlayer
-                        '.fp-ui',                           # FlowPlayer
-                        '.play-button',                     # Generic
-                        '#play-button',
-                        'div.player-mobile-play-button',    # Common mobile overlay
-                        'a.thumb-link',                     # Click thumbnail to play
-                        'video', 
-                        'iframe'
-                    ]
+                # 2. Smart Interaction Loop (Early Exit + Overlay Killer)
+                # Wait up to 15 seconds, but exit IMMEDIATELY if video is found
+                import time
+                
+                # Extended Aggressive Selectors
+                play_selectors = [
+                    "button[aria-label='Play']", 
+                    ".vjs-big-play-button", 
+                    ".jw-display-icon-display", 
+                    ".jw-display-icon-container",
+                    ".fp-ui",
+                    ".play-button",
+                    "#play-button",
+                    "div[class*='play']",   # Aggressive class matching
+                    "a.thumb-link",
+                    "video",
+                    "iframe"
+                ]
+
+                start_time = time.time()
+                while time.time() - start_time < 15:
+                    # A. Early Exit: Did we get the video?
+                    if intercepted_urls:
+                        logger.info(f"🚀 [BROWSER] Video found! Exiting early ({len(intercepted_urls)} intercepted)")
+                        break
+                    
+                    # B. Try Clicking with JavaScript (Bypass Overlays)
+                    # logger.debug("[BROWSER] Scanning for play buttons...")
                     for selector in play_selectors:
-                        if page.locator(selector).first.is_visible(timeout=500):
-                            logger.info(f"[BROWSER] Clicking play selector: {selector}")
-                            page.locator(selector).first.click(timeout=500, force=True)
-                            page.wait_for_timeout(1000) # Wait for request to fire
-                except Exception:
-                    pass
+                        try:
+                            # 1. Check existence first to avoid console noise
+                            # 2. Dispatch 'click' event directly to element (ignores overlays)
+                            # 3. Also try .play() if it's a media element
+                            page.evaluate(f"""() => {{
+                                const el = document.querySelector("{selector}");
+                                if (el) {{
+                                    // console.log("Clicking {selector}");
+                                    el.dispatchEvent(new MouseEvent('click', {{bubbles: true, cancelable: true, view: window}}));
+                                    if (el.tagName === 'VIDEO') el.play();
+                                }}
+                            }}""")
+                        except Exception:
+                            continue
+                    
+                    # C. Wait a bit before retry
+                    page.wait_for_timeout(1000)
+                
+                if not intercepted_urls:
+                    logger.warning(f"[BROWSER] No video URLs intercepted after 15s interaction")
                 
                 # Extract title
                 try:
