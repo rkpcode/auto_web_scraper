@@ -36,6 +36,17 @@ class ViralkandExtractor(BaseExtractor):
         try:
             logger.info(f"🔍 Extracting from {self._get_domain(url)}")
             
+            # FAST FAIL: Check for known non-video patterns early
+            # This prevents requesting/parsing pages that are definitely not videos (e.g. tags, categories)
+            skip_patterns = ['/tags/', '/tag/', '/category/', '/search/', '/page/', '/login', '/register']
+            if any(pattern in url.lower() for pattern in skip_patterns):
+                 logger.warning(f"⏭️ Skipping non-video URL: {url}")
+                 raise ExtractionError(
+                    "Skipping non-video page (Fast Fail)", 
+                    url=url, 
+                    details=f"URL contains non-video pattern. Skipped."
+                )
+            
             # Fetch page with realistic browser headers
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
