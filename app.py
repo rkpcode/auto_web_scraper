@@ -26,7 +26,7 @@ if os.getenv("SPACE_ID") and not os.path.exists("/home/user/.cache/ms-playwright
 
 from video_engine.database_supabase import db
 from video_engine.harvester import harvest_and_save
-from video_engine.main_twophase import process_video
+from video_engine.pipeline_runner import process_video
 from video_engine.config import MAX_WORKERS, DEFAULT_MAX_PAGES
 from concurrent.futures import ThreadPoolExecutor, as_completed
 

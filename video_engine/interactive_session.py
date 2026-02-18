@@ -12,7 +12,7 @@ from config import MAX_WORKERS
 from database import db
 from core.logger import logger
 from harvester import harvest_and_save
-from main import process_video
+from video_processor import process_video
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 

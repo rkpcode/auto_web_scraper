@@ -4,7 +4,8 @@ Automated video discovery, download, and upload pipeline with Gradio UI.
 
 ## 🚀 Features
 
-- **Two-Phase Processing:** Separate Discovery (Harvester) and Processing (Workers) phases
+- **Two-Phase Architecture**: Uses `video_engine/pipeline_runner.py` for separate discovery and processing phases.
+- **Interactive Mode**: `video_engine/interactive_session.py` for manual control.
 - **Pagination Support:** Auto-crawls multiple pages with rate limiting
 - **Persistent State:** Supabase (PostgreSQL) database survives Space restarts
 - **Non-Blocking UI:** Background threading keeps interface responsive

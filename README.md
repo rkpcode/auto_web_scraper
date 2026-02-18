@@ -53,7 +53,7 @@ Set these secrets in HF Spaces Settings:
 
 ## Deployment
 
-See [README_SPACES.md](README_SPACES.md) for detailed deployment instructions.
+See [docs/README_SPACES.md](docs/README_SPACES.md) for detailed deployment instructions.
 
 ## Production Ready ✅
 
