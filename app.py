@@ -75,14 +75,17 @@ state = PipelineState()
 # ============================================================================
 # PHASE A: DISCOVERY (Background Thread)
 # ============================================================================
-def run_discovery_background(website_url, max_pages):
+# ============================================================================
+# PHASE A: DISCOVERY (Background Thread)
+# ============================================================================
+def run_discovery_background(website_url, max_pages, start_page=1):
     """Run harvester in background thread."""
     try:
         state.set_discovery_running(True)
-        print(f"[DISCOVERY] Starting: {website_url}, max_pages={max_pages}")
+        print(f"[DISCOVERY] Starting: {website_url}, max_pages={max_pages}, start_page={start_page}")
         
         # Run harvester
-        stats = harvest_and_save(website_url, method='pagination', max_pages=max_pages)
+        stats = harvest_and_save(website_url, method='pagination', max_pages=max_pages, start_page=start_page)
         state.update_discovery_stats(stats)
         
         print(f"[DISCOVERY] Complete: {stats}")
@@ -95,7 +98,7 @@ def run_discovery_background(website_url, max_pages):
         print("[DISCOVERY] Cleanup complete")
 
 
-def start_discovery(website_url, max_pages):
+def start_discovery(website_url, max_pages, start_page):
     """Start discovery phase (non-blocking)."""
     if state.discovery_running:
         return "⚠️ Discovery already running. Please wait..."
@@ -106,12 +109,12 @@ def start_discovery(website_url, max_pages):
     # Start background thread
     thread = threading.Thread(
         target=run_discovery_background,
-        args=(website_url, int(max_pages)),
+        args=(website_url, int(max_pages), int(start_page)),
         daemon=True
     )
     thread.start()
     
-    return f"🔍 Discovery started for: {website_url}\nCheck stats below for progress..."
+    return f"🔍 Discovery started for: {website_url} (Page {start_page}-{int(start_page)+int(max_pages)-1})\nCheck stats below for progress..."
 
 
 # ============================================================================
@@ -256,6 +259,15 @@ with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
                 info="Hard limit to prevent infinite loops"
             )
             
+            start_page_slider = gr.Slider(
+                minimum=1,
+                maximum=100,
+                value=1,
+                step=1,
+                label="Start Page Number",
+                info="Useful for resuming or skipping initial pages"
+            )
+            
             discovery_btn = gr.Button("🔍 Start Discovery", variant="primary", size="lg")
             discovery_output = gr.Textbox(label="Discovery Status", lines=3, interactive=False)
             
@@ -274,7 +286,7 @@ with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
     # Event handlers
     discovery_btn.click(
         fn=start_discovery,
-        inputs=[website_input, max_pages_slider],
+        inputs=[website_input, max_pages_slider, start_page_slider],
         outputs=discovery_output
     )
     
