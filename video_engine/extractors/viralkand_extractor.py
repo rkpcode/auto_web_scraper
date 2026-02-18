@@ -59,19 +59,32 @@ class ViralkandExtractor(BaseExtractor):
             title = soup.find('title')
             title = title.text.strip() if title else 'Untitled'
             
-            # Find iframe with player-x.php and q parameter
+            # Find iframe with q parameter (relaxed check)
             target_iframe = None
+            found_iframes = []
+            
             for iframe in soup.find_all('iframe'):
                 src = iframe.get('src', '')
-                if 'player-x.php' in src and 'q=' in src:
-                    target_iframe = src
-                    break
+                found_iframes.append(src)
+                
+                # Check for q parameter (core mechanism)
+                if 'q=' in src:
+                    # If we find the standard player-x.php, use it immediately
+                    if 'player-x.php' in src:
+                        target_iframe = src
+                        break
+                    
+                    # Otherwise, keep the first 'q=' iframe found as a fallback
+                    if target_iframe is None:
+                        target_iframe = src
             
             if not target_iframe:
+                # Log found iframes to help debugging
+                iframe_summary = ', '.join([fstr[:50] for fstr in found_iframes[:3]])
                 raise ExtractionError(
                     "No player iframe found", 
                     url=url, 
-                    details="Looking for iframe[src*='player-x.php?q=']"
+                    details=f"Scanned {len(found_iframes)} iframes. None had 'q=' param. Found: [{iframe_summary}]"
                 )
             
             logger.info(f"📺 Found video player iframe")
