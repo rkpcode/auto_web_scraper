@@ -218,18 +218,32 @@ class BrowserExtractor(BaseExtractor):
                         pass
 
                 # 4. Wait for network requests to populate
-                logger.info(f"[BROWSER] Waiting 15s for media requests...")
-                page.wait_for_timeout(15000)
+                # Reduced wait time to avoid "stuck" feeling, rely on interception
+                logger.info(f"[BROWSER] Waiting 8s for media requests...")
+                page.wait_for_timeout(8000)
                 
                 browser.close()
                 
                 # Select best video URL
                 if intercepted_urls:
+                    # Filter out obvious ad videos
+                    valid_urls = []
+                    for u in intercepted_urls:
+                        u_lower = u.lower()
+                        # Skip small ad videos or banners
+                        if any(x in u_lower for x in ['300x250', 'banner', 'preview', 'intro', 'outros', 'b.b.js']):
+                            logger.info(f"[FILTER] Ignoring ad/banner video: {u[:50]}...")
+                            continue
+                        valid_urls.append(u)
+
+                    if not valid_urls:
+                        raise ExtractionError("Only ad/banner videos found", url=url)
+
                     # Priority: .mp4 > .m3u8 > others
-                    mp4_urls = [u for u in intercepted_urls if '.mp4' in u.lower()]
-                    m3u8_urls = [u for u in intercepted_urls if '.m3u8' in u.lower()]
+                    mp4_urls = [u for u in valid_urls if '.mp4' in u.lower()]
+                    m3u8_urls = [u for u in valid_urls if '.m3u8' in u.lower()]
                     
-                    video_url = mp4_urls[0] if mp4_urls else (m3u8_urls[0] if m3u8_urls else intercepted_urls[0])
+                    video_url = mp4_urls[0] if mp4_urls else (m3u8_urls[0] if m3u8_urls else valid_urls[0])
                     
                     logger.info(f"[SUCCESS] Extracted: {video_url[:100]}...")
                     return video_url, title
