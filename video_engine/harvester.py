@@ -50,16 +50,14 @@ class BaseHarvester:
         Returns:
             bool: True if likely a video page
         """
-        # Default patterns (override for better accuracy)
-        video_patterns = [
-            r'/video/',
-            r'/watch/',
-            r'/v/',
-            r'/\d{4,}/',  # Numeric IDs
-            r'[a-z0-9-]+/$',  # Slugs ending with /
-        ]
+        # Viralkand specific pattern: domain.com/post-slug/
+        # Check if it's a deep link and not a category
+        path = urlparse(url).path
+        if not path or path == '/': return False
         
-        return any(re.search(pattern, url, re.I) for pattern in video_patterns)
+        # If path has a slug and is not excluded by filter_urls, treat as potential video page
+        # The filter_urls method handles exclusion of /category/, /tag/, etc.
+        return True
     
     def filter_urls(self, urls):
         """
@@ -213,24 +211,19 @@ class LinkHarvester(BaseHarvester):
         logger.info(f"[HARVESTER] Start page: {start_page}, Max pages: {max_pages}")
         
         page_num = start_page
+        end_page = start_page + max_pages
         consecutive_zero_pages = 0
         
-        while page_num <= max_pages:
-            # Try different pagination patterns
-            page_urls = [
-                f"{self.base_url}?page={page_num}",
-                f"{self.base_url}/page/{page_num}",
-                f"{self.base_url}?p={page_num}",
-            ]
-            
-            # Use the first pattern that matches the base URL structure
+        while page_num < end_page:
+            # URL Construction Logic - Prioritize WordPress style /page/n/
             if '?' in self.base_url:
                 current_page_url = f"{self.base_url}&page={page_num}"
             else:
-                current_page_url = page_urls[0]
+                # viralkand.com usually uses /page/n/
+                current_page_url = f"{self.base_url.rstrip('/')}/page/{page_num}/"
             
             try:
-                logger.info(f"[HARVESTER] Crawling page {page_num}/{max_pages}: {current_page_url}")
+                logger.info(f"[HARVESTER] Crawling page {page_num} of {end_page-1}: {current_page_url}")
                 
                 # CRITICAL: Rotate User-Agent on every page to prevent fingerprinting
                 from core.utils import get_random_user_agent
@@ -242,6 +235,16 @@ class LinkHarvester(BaseHarvester):
                     'Accept-Language': 'en-US,en;q=0.5',
                 }
                 response = requests.get(current_page_url, headers=headers, timeout=15)
+                
+                if response.status_code == 404:
+                    logger.info(f"[HARVESTER] Page {page_num} returned 404 - reached end of pagination")
+                    break
+                elif response.status_code != 200:
+                    logger.warning(f"[HARVESTER] Page {page_num} returned status {response.status_code}")
+                    # Don't break immediately on other errors, just skip
+                    page_num += 1
+                    continue
+                    
                 response.raise_for_status()
                 
                 soup = BeautifulSoup(response.text, 'html.parser')
@@ -260,7 +263,7 @@ class LinkHarvester(BaseHarvester):
                 after_count = len(self.discovered_urls)
                 
                 new_links_found = after_count - before_count
-                logger.info(f"[HARVESTER] Page {page_num}: Found {new_links_found} new video links (Total: {after_count})")
+                logger.info(f"✅ Page {page_num}: Found {new_links_found} new video links (Total: {after_count})")
                 
                 # AUTO-STOP: If no new links found, stop crawling
                 if new_links_found == 0:
@@ -274,24 +277,20 @@ class LinkHarvester(BaseHarvester):
                     consecutive_zero_pages = 0  # Reset counter
                 
                 # Rate limiting: Random delay to avoid IP bans
-                if page_num < max_pages:
+                if page_num < end_page:
                     delay = random.uniform(2.0, 5.0)
                     logger.debug(f"[HARVESTER] Waiting {delay:.1f}s before next page...")
                     time.sleep(delay)
                 
                 page_num += 1
                 
-            except requests.exceptions.HTTPError as e:
-                if e.response.status_code == 404:
-                    logger.info(f"[HARVESTER] Page {page_num} returned 404 - reached end of pagination")
-                    break
-                else:
-                    logger.error(f"[HARVESTER] HTTP error on page {page_num}: {e}")
-                    break
-            
             except Exception as e:
                 logger.error(f"[HARVESTER] Error crawling page {page_num}: {e}")
-                break
+                # Don't break the whole loop on one page error
+                page_num += 1
+                continue
+            
+
         
         logger.info(f"[HARVESTER] Pagination complete: {len(self.discovered_urls)} total video URLs discovered across {page_num-1} pages")
         return self.discovered_urls
