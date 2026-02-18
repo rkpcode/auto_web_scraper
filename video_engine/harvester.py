@@ -195,12 +195,13 @@ class LinkHarvester(BaseHarvester):
     - Hard max_pages limit for safety
     """
     
-    def discover(self, max_pages=5):
+    def discover(self, max_pages=5, start_page=1):
         """
         Discover video URLs using pagination with auto-stop.
         
         Args:
             max_pages: Maximum pages to crawl (default=5, hard limit)
+            start_page: Page number to start from (default=1)
         
         Returns:
             set: Discovered video URLs
@@ -209,9 +210,9 @@ class LinkHarvester(BaseHarvester):
         import random
         
         logger.info(f"[HARVESTER] Starting pagination discovery from {self.base_url}")
-        logger.info(f"[HARVESTER] Max pages: {max_pages}")
+        logger.info(f"[HARVESTER] Start page: {start_page}, Max pages: {max_pages}")
         
-        page_num = 1
+        page_num = start_page
         consecutive_zero_pages = 0
         
         while page_num <= max_pages:
@@ -346,7 +347,7 @@ class SitemapHarvester(BaseHarvester):
         return generic.discover()
 
 
-def harvest_and_save(base_url, method='auto', max_pages=5):
+def harvest_and_save(base_url, method='auto', max_pages=5, start_page=1):
     """
     Convenience function to discover and save URLs with detailed stats.
     
@@ -354,6 +355,7 @@ def harvest_and_save(base_url, method='auto', max_pages=5):
         base_url: Website homepage URL
         method: 'auto', 'sitemap', 'generic', or 'pagination'
         max_pages: Maximum pages to crawl (for pagination/generic methods)
+        start_page: Page number to start crawling from (for pagination method)
         
     Returns:
         dict: Statistics with keys:
@@ -372,7 +374,10 @@ def harvest_and_save(base_url, method='auto', max_pages=5):
         harvester = LinkHarvester(base_url)
     
     # Discover URLs
-    urls = harvester.discover(max_pages=max_pages)
+    if isinstance(harvester, LinkHarvester):
+        urls = harvester.discover(max_pages=max_pages, start_page=start_page)
+    else:
+        urls = harvester.discover(max_pages=max_pages)
     
     # Save to database
     new_count = harvester.save_to_database(urls)

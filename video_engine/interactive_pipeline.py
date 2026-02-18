@@ -64,15 +64,21 @@ def harvest_from_website():
     if method in ['auto', 'generic']:
         max_pages_input = input("\n📄 Max pages to crawl [default: 10]: ").strip()
         max_pages = int(max_pages_input) if max_pages_input.isdigit() else 10
+        
+        # New: Start Page option
+        start_page_input = input("⏩ Start from page [default: 1]: ").strip()
+        start_page = int(start_page_input) if start_page_input.isdigit() else 1
     else:
         max_pages = 10
+        start_page = 1
     
     print(f"\n🚀 Starting discovery from: {website_url}")
     print(f"   Method: {method}")
+    print(f"   Start page: {start_page}")
     print(f"   Max pages: {max_pages}")
     
     try:
-        new_count = harvest_and_save(website_url, method=method, max_pages=max_pages)
+        new_count = harvest_and_save(website_url, method=method, max_pages=max_pages, start_page=start_page)
         print(f"\n✅ Discovered {new_count} new video URLs")
         return db.get_pending_urls()
     except Exception as e:
