@@ -92,6 +92,16 @@ class BrowserExtractor(BaseExtractor):
         Returns:
             tuple: (direct_video_url, title)
         """
+        # FAST FAIL: Check URL patterns before launching browser
+        # This saves significant resources by avoiding browser launch for junk URLs
+        skip_patterns = ['/tags/', '/tag/', '/category/', '/search/', '/page/', '/login', '/register', '/user/']
+        if any(pattern in url.lower() for pattern in skip_patterns):
+             raise ExtractionError(
+                "Skipping non-video page (Fast Fail)", 
+                url=url, 
+                details=f"URL contains non-video pattern. Skipped."
+            )
+
         video_url = None
         title = None
         
