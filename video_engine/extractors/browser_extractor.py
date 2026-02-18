@@ -200,14 +200,18 @@ class BrowserExtractor(BaseExtractor):
                 ]
 
                 start_time = time.time()
+                video_url = None
+                
                 while time.time() - start_time < 15:
                     # A. Early Exit: Did we get the video?
                     if intercepted_urls:
+                        video_url = intercepted_urls[0]
                         logger.info(f"🚀 [BROWSER] Video found! Exiting early ({len(intercepted_urls)} intercepted)")
-                        break
+                        # CRITICAL: Close browser immediately to free RAM
+                        browser.close()
+                        return video_url, page.title()
                     
                     # B. Try Clicking with JavaScript (Bypass Overlays)
-                    # logger.debug("[BROWSER] Scanning for play buttons...")
                     for selector in play_selectors:
                         try:
                             # 1. Check existence first to avoid console noise
@@ -216,11 +220,10 @@ class BrowserExtractor(BaseExtractor):
                             page.evaluate(f"""() => {{
                                 const el = document.querySelector("{selector}");
                                 if (el) {{
-                                    // console.log("Clicking {selector}");
                                     el.dispatchEvent(new MouseEvent('click', {{bubbles: true, cancelable: true, view: window}}));
                                     if (el.tagName === 'VIDEO') el.play();
                                 }}
-                            }}""")
+                            }}""", timeout=1000) # Short timeout for JS execution
                         except Exception:
                             continue
                     
