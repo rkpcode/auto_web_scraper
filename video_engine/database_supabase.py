@@ -119,24 +119,31 @@ class SupabaseManager:
         links_list = list(set(links))  # Deduplicate in Python first
         logger.info(f"[SUPABASE] Inserting {len(links_list)} URLs (batch mode)...")
         
-        with self.get_cursor() as cursor:
-            # Use executemany for batch insert
-            # ON CONFLICT ensures duplicates are silently ignored
-            insert_query = """
-                INSERT INTO videos (original_url, status, created_at)
-                VALUES (%s, %s, CURRENT_TIMESTAMP)
-                ON CONFLICT (original_url) DO NOTHING
-            """
+        try:
+            with self.get_cursor() as cursor:
+                # Use executemany for batch insert
+                # ON CONFLICT ensures duplicates are silently ignored
+                insert_query = """
+                    INSERT INTO videos (original_url, status, created_at)
+                    VALUES (%s, %s, CURRENT_TIMESTAMP)
+                    ON CONFLICT (original_url) DO NOTHING
+                """
+                
+                data = [(url, status) for url in links_list]
+                logger.debug(f"[SUPABASE] Executing batch insert for {len(data)} items...")
+                cursor.executemany(insert_query, data)
+                logger.debug("[SUPABASE] Batch insert execution complete.")
+                
+                # rowcount gives number of inserted rows (excluding duplicates)
+                inserted_count = cursor.rowcount
+                logger.debug(f"[SUPABASE] Row count: {inserted_count}")
             
-            data = [(url, status) for url in links_list]
-            cursor.executemany(insert_query, data)
+            logger.info(f"[SUPABASE] Successfully added {inserted_count} new URLs (skipped {len(links_list) - inserted_count} duplicates)")
+            return inserted_count
             
-            # rowcount gives number of inserted rows (excluding duplicates)
-            inserted_count = cursor.rowcount
-        
-        logger.info(f"[SUPABASE] Successfully added {inserted_count} new URLs (skipped {len(links_list) - inserted_count} duplicates)")
-        logger.info(f"[SUPABASE] Successfully added {inserted_count} new URLs (skipped {len(links_list) - inserted_count} duplicates)")
-        return inserted_count
+        except Exception as e:
+            logger.error(f"[SUPABASE] Error in bulk_seed_links: {e}")
+            return 0
     
     def insert_videos_batch(self, links, status='PENDING'):
         """
