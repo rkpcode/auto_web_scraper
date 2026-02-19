@@ -38,7 +38,8 @@ def clean_database():
         "No video URLs intercepted",
         "404",
         "Navigating to page failed",
-        "Timeout"
+        "Timeout",
+        "Skipping non-video page"
     ]
     
     deleted_count = 0
