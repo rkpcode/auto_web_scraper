@@ -15,7 +15,7 @@ if not DATABASE_URL:
 if "connect_timeout" not in DATABASE_URL:
     import logging
     logging.warning(
-        "⚠️  DATABASE_URL missing connect_timeout parameter. "
+        "[WARN] DATABASE_URL missing connect_timeout parameter. "
         "Add '?connect_timeout=10' to prevent hanging connections."
     )
 
@@ -53,7 +53,7 @@ MAX_WORKERS = 2  # HARD LIMIT for HF Spaces
 _MAX_WORKERS_ENV = int(os.getenv("MAX_WORKERS", "2"))
 if _MAX_WORKERS_ENV > 2:
     import logging
-    logging.warning(f"⚠️  MAX_WORKERS={_MAX_WORKERS_ENV} exceeds safe limit. Capping at 2 for HF Spaces.")
+    logging.warning(f"[WARN] MAX_WORKERS={_MAX_WORKERS_ENV} exceeds safe limit. Capping at 2 for HF Spaces.")
     MAX_WORKERS = 2
 else:
     MAX_WORKERS = _MAX_WORKERS_ENV

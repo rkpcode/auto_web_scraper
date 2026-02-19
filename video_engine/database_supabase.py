@@ -40,7 +40,7 @@ class SupabaseManager:
         
         # Test connection on init
         self._init_db()
-        logger.info("✅ Supabase connection established")
+        logger.info("[OK] Supabase connection established")
     
     @contextmanager
     def get_cursor(self):
@@ -274,7 +274,7 @@ class SupabaseManager:
             affected = cursor.rowcount
         
         if affected > 0:
-            logger.info(f"♻️  Reset {affected} stale videos to PENDING")
+            logger.info(f"[RESET] Reset {affected} stale videos to PENDING")
         
         return affected
     

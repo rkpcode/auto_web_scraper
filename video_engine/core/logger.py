@@ -15,7 +15,11 @@ def setup_logger(name="video_pipeline"):
     if logger.handlers:
         return logger
     
-    # Console handler
+    # Console handler - FORCE UTF-8 for Windows
+    if sys.platform == "win32":
+        # Windows requires explicit encoding for emojis in console
+        sys.stdout.reconfigure(encoding='utf-8')
+    
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.INFO)
     console_format = logging.Formatter(
