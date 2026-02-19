@@ -10,6 +10,9 @@ from urllib.parse import urljoin, urlparse
 import re
 from core.logger import logger
 from video_engine.database_supabase import db
+import time
+import random
+from collections import deque
 
 
 class BaseHarvester:
@@ -346,6 +349,180 @@ class SitemapHarvester(BaseHarvester):
         return generic.discover()
 
 
+class ViralkandHarvester(BaseHarvester):
+    """
+    Specialized harvester for viralkand.com using Priority Queue BFS.
+    Prioritizes Video Links, then Categories. Skips Tags.
+    """
+    
+    def discover(self, max_pages=10):
+        """
+        Discover video URLs using a controlled BFS + Priority Queue logic.
+        
+        Args:
+            max_pages: Maximum number of pages to crawl (crawl steps limit)
+        
+        Returns:
+            set: Discovered video URLs
+        """
+        logger.info(f"[HARVESTER] Starting Viralkand BFS discovery from {self.base_url}")
+        
+        visited = set()
+        # Queue stores URLs to crawl. 
+        # We use a deque for efficient pops from left.
+        # Initial queue has just the homepage.
+        queue = deque([self.base_url])
+        
+        # Track separately to avoid re-adding existing videos to DB needlessly in this run
+        self.discovered_videos = set()
+        
+        pages_crawled = 0
+        
+        while queue and pages_crawled < max_pages:
+            current_url = queue.popleft()
+            
+            if current_url in visited:
+                continue
+            
+            try:
+                # SAFETY DELAY: 3-7s random sleep to behave like a human
+                delay = random.uniform(3.0, 7.0)
+                logger.info(f"[HARVESTER] ⏳ Waiting {delay:.1f}s...")
+                time.sleep(delay)
+                
+                logger.info(f"[HARVESTER] 🕸️ Crawling {pages_crawled + 1}/{max_pages}: {current_url}")
+                
+                # Fetch page
+                from core.utils import get_random_user_agent
+                headers = {
+                    'User-Agent': get_random_user_agent(),
+                    'Referer': self.base_url,
+                    'Connection': 'keep-alive'
+                }
+                
+                response = requests.get(current_url, headers=headers, timeout=15)
+                response.raise_for_status()
+                
+                soup = BeautifulSoup(response.text, 'html.parser')
+                
+                # Extract ALL links
+                page_links = []
+                for a in soup.find_all('a', href=True):
+                    full_url = urljoin(current_url, a['href'])
+                    # Basic cleanup
+                    full_url = full_url.split('#')[0].split('?')[0] # Remove fragments/queries for cleaner crawling
+                    
+                    # Ensure domain match
+                    if self.domain not in full_url:
+                        continue
+                        
+                    page_links.append(full_url)
+                
+                # SEPARATE: Video Links vs Category Links
+                video_candidates = []
+                category_candidates = []
+                
+                for link in page_links:
+                    if self.is_video_page(link):
+                        video_candidates.append(link)
+                    elif self.is_category_link(link):
+                        category_candidates.append(link)
+                    elif '/page/' in link:
+                         category_candidates.append(link) # Treat pagination like categories (crawl targets)
+
+                # PROCESS 1: Add Video Links (Immediate Reward)
+                new_videos = 0
+                for v_link in video_candidates:
+                    if v_link not in self.discovered_videos:
+                        self.discovered_videos.add(v_link)
+                        new_videos += 1
+                
+                logger.info(f"   found {new_videos} new videos, {len(category_candidates)} crawl targets")
+
+                # PROCESS 2: Add Category Links to Queue (Future Reward)
+                # Sort unique candidates to keep order deterministic-ish
+                for c_link in sorted(list(set(category_candidates))):
+                    if c_link not in visited and c_link not in queue:
+                        queue.append(c_link)
+                
+                visited.add(current_url)
+                pages_crawled += 1
+                
+            except Exception as e:
+                logger.error(f"[HARVESTER] Error crawling {current_url}: {e}")
+                visited.add(current_url) # Mark visited so we don't retry forever
+        
+        logger.info(f"[HARVESTER] Viralkand discovery complete. Found {len(self.discovered_videos)} videos.")
+        return self.discovered_videos
+
+    def is_video_page(self, url):
+        """
+        Strict logic to identify video pages.
+        Format: viralkand.com/video-title-slug/ (Level 1 path)
+        """
+        # Parse path
+        parsed = urlparse(url)
+        if parsed.netloc != self.domain:
+            return False
+            
+        path = parsed.path.strip('/')
+        if not path: 
+            return False
+            
+        # Blacklist of known non-video prefixes/slugs
+        blacklist = [
+            'category', 'tag', 'author', 'page', 'search', 'login', 'register',
+            'contact', 'about', 'dmca', 'privacy', 'terms', 'cookie', 
+            '18-u-s-c', 'compliance', 'uploads', 'wp-content', 'wp-includes'
+        ]
+        
+        parts = path.split('/')
+        
+        # RULE 1: Video pages are usually at root level (depth 1)
+        # viralkand.com/video-slug/ -> matches
+        # viralkand.com/category/desi/ -> fails (depth 2)
+        if len(parts) > 1:
+            return False
+            
+        slug = parts[0].lower()
+        
+        # RULE 2: Slug must not contain blacklist keywords
+        if any(word in slug for word in blacklist):
+            return False
+            
+        # RULE 3: Extension check (avoid .jpg, .css pages if any)
+        if '.' in slug:
+             # If it has an extension, it better be .html or .php (rare but possible)
+             # but usually these are resource files
+             if not (slug.endswith('.html') or slug.endswith('.php')):
+                 return False
+
+        return True
+
+    def is_category_link(self, url):
+        """
+        Identify links that are good for crawling (Categories).
+        """
+        parsed = urlparse(url)
+        path = parsed.path.strip('/')
+        
+        # Must be valid path
+        if not path:
+             # Homepage is a "category" in abstract sense, but already in queue
+             return False 
+             
+        # Explicit Category paths
+        if 'category/' in path or 'mms-videos' in path or 'bhabhi' in path:
+            return True
+        
+        # Check for /page/n pattern
+        if '/page/' in path:
+            return True
+            
+        return False
+
+
+
 def harvest_and_save(base_url, method='auto', max_pages=5, start_page=1):
     """
     Convenience function to discover and save URLs with detailed stats.
@@ -368,6 +545,8 @@ def harvest_and_save(base_url, method='auto', max_pages=5, start_page=1):
         harvester = GenericHarvester(base_url)
     elif method == 'pagination':
         harvester = LinkHarvester(base_url)
+    elif 'viralkand.com' in base_url or 'thekamababa.com' in base_url:
+        harvester = ViralkandHarvester(base_url)
     else:  # auto
         # Try pagination first (best for most sites), fallback to sitemap
         harvester = LinkHarvester(base_url)
