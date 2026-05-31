@@ -82,11 +82,20 @@ class SupabaseManager:
                     original_url TEXT UNIQUE NOT NULL,
                     status TEXT DEFAULT 'PENDING',
                     bunny_guid TEXT,
+                    upload_provider TEXT,
+                    upload_id TEXT,
                     local_filename TEXT,
                     error_message TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP
                 )
+            """)
+            
+            # Perform PostgreSQL migration to add columns if they do not exist
+            cursor.execute("""
+                ALTER TABLE videos 
+                ADD COLUMN IF NOT EXISTS upload_provider TEXT,
+                ADD COLUMN IF NOT EXISTS upload_id TEXT
             """)
             
             # Create indexes for faster queries

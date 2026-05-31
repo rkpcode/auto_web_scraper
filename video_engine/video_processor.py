@@ -14,7 +14,7 @@ from config import MAX_WORKERS, MIN_FREE_DISK_GB
 from database import db
 from core.logger import logger
 from core.downloader import VideoDownloader
-from core.uploader import BunnyUploader
+from core.uploader import get_uploader
 from core.utils import cleanup_file, check_disk_space
 from extractors import get_extractor
 from core.exceptions import (
@@ -65,20 +65,27 @@ def process_video(url):
         filename, filepath = downloader.download(video_url, original_page_url=url)
         
         try:
-            # 5. Upload to Bunny Stream
+            # 5. Upload to Selected Provider
             db.update_status(url, 'UPLOADING', local_filename=filename)
-            uploader = BunnyUploader()
+            uploader = get_uploader()
             
-            # Create video object
+            # Get selected provider name to store in DB
+            from config import UPLOAD_PROVIDER
+            
+            # Create/upload video
             video_title = title or filename
-            guid = uploader.create_video(video_title)
-            
-            # Upload binary
-            uploader.upload_binary(guid, filepath)
+            upload_id = uploader.upload(video_title, filepath)
             
             # 6. Mark as completed
-            db.update_status(url, 'COMPLETED', bunny_guid=guid)
-            logger.info(f"SUCCESS: {url} -> GUID: {guid}")
+            db_kwargs = {
+                'upload_id': upload_id,
+                'upload_provider': UPLOAD_PROVIDER
+            }
+            if UPLOAD_PROVIDER == 'bunny':
+                db_kwargs['bunny_guid'] = upload_id
+                
+            db.update_status(url, 'COMPLETED', **db_kwargs)
+            logger.info(f"SUCCESS: {url} -> {UPLOAD_PROVIDER.upper()} ID: {upload_id}")
         
         finally:
             # GUARANTEED cleanup (even if upload fails)

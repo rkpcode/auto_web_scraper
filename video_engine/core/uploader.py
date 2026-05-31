@@ -1,12 +1,32 @@
 import os
 import requests
+from abc import ABC, abstractmethod
 from tenacity import retry, stop_after_attempt, wait_exponential
 from core.logger import logger
 from config import BUNNY_API_KEY, BUNNY_LIBRARY_ID, BUNNY_BASE_URL
 from core.exceptions import UploadError, ConfigurationError
 
 
-class BunnyUploader:
+class BaseUploader(ABC):
+    """
+    Abstract base class for all uploaders.
+    """
+    @abstractmethod
+    def upload(self, title, filepath) -> str:
+        """
+        Uploads the video file to the provider.
+        
+        Args:
+            title: Title of the video
+            filepath: Path to local video file
+            
+        Returns:
+            str: Unique identifier of the uploaded video (guid or filecode)
+        """
+        pass
+
+
+class BunnyUploader(BaseUploader):
     """
     Bunny Stream API wrapper with retry logic.
     Handles video creation and binary upload.
@@ -102,6 +122,40 @@ class BunnyUploader:
         if response.status_code == 200:
             return response.json()
         return None
+
+    def upload(self, title, filepath) -> str:
+        """
+        Uploads the video to Bunny Stream.
+        """
+        guid = self.create_video(title)
+        self.upload_binary(guid, filepath)
+        return guid
+
+
+def get_uploader(provider=None) -> BaseUploader:
+    """
+    Factory function to retrieve the appropriate uploader.
+    If provider is not passed, it uses UPLOAD_PROVIDER from config.
+    """
+    if provider is None:
+        from config import UPLOAD_PROVIDER
+        provider = UPLOAD_PROVIDER
+    
+    provider = provider.strip().lower()
+    
+    if provider == "bunny":
+        return BunnyUploader()
+    elif provider == "doodstream":
+        from core.free_host_uploader import DoodStreamUploader
+        return DoodStreamUploader()
+    elif provider == "streamwish":
+        from core.free_host_uploader import StreamWishUploader
+        return StreamWishUploader()
+    elif provider == "lulustream":
+        from core.free_host_uploader import LuluStreamUploader
+        return LuluStreamUploader()
+    else:
+        raise ConfigurationError(f"Unsupported upload provider: {provider}")
 
 
 

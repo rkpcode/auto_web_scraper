@@ -27,7 +27,7 @@ if os.getenv("SPACE_ID") and not os.path.exists("/home/user/.cache/ms-playwright
 from video_engine.database_supabase import db
 from video_engine.harvester import harvest_and_save
 from video_engine.pipeline_runner import process_video
-from video_engine.config import MAX_WORKERS, DEFAULT_MAX_PAGES
+from video_engine.config import MAX_WORKERS, DEFAULT_MAX_PAGES, UPLOAD_PROVIDER
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
@@ -197,7 +197,8 @@ def get_live_stats():
         current_state = state.get_state()
         
         # Build stats table
-        stats_md = "### 📊 Database Statistics\n\n"
+        stats_md = f"**Active Upload Provider:** `{UPLOAD_PROVIDER.upper()}`\n\n"
+        stats_md += "### 📊 Database Statistics\n\n"
         stats_md += "| Status | Count |\n|--------|-------|\n"
         
         for status, count in sorted(db_stats.items()):
@@ -234,11 +235,11 @@ with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
     # 🎬 Video Scraper Pipeline (Two-Phase Model)
     
     **Phase A:** Discovery - Harvester scans pages and seeds database  
-    **Phase B:** Processing - Workers download and upload videos to Bunny Stream
+    **Phase B:** Processing - Workers download and upload videos to **{provider}**  
     
     **Database:** Supabase (PostgreSQL) - State persists across restarts  
     **Workers:** {workers} (Optimized for HF Spaces 16GB RAM)
-    """.format(workers=MAX_WORKERS))
+    """.format(workers=MAX_WORKERS, provider=UPLOAD_PROVIDER.upper()))
     
     with gr.Row():
         with gr.Column(scale=1):
@@ -311,8 +312,12 @@ with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
         ### 1. Environment Variables (HF Spaces Secrets)
         
         - `DATABASE_URL`: Supabase connection string (PostgreSQL)
-        - `BUNNY_API_KEY`: Bunny Stream API key
-        - `BUNNY_LIBRARY_ID`: Bunny Stream library ID
+        - `UPLOAD_PROVIDER`: Selected video upload provider (`doodstream` (default), `streamwish`, `lulustream`, or `bunny`)
+        - `DOODSTREAM_API_KEY`: DoodStream API key (and optional `DOODSTREAM_BASE_URL`)
+        - `STREAMWISH_API_KEY`: StreamWish API key (and optional `STREAMWISH_BASE_URL`)
+        - `LULUSTREAM_API_KEY`: LuluStream API key (and optional `LULUSTREAM_BASE_URL`)
+        - `BUNNY_API_KEY`: Bunny Stream API key (optional)
+        - `BUNNY_LIBRARY_ID`: Bunny Stream library ID (optional)
         
         ### 2. How It Works
         
@@ -325,7 +330,7 @@ with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
         **Phase B (Processing):**
         1. Fetches PENDING videos from database
         2. Downloads using yt-dlp
-        3. Uploads to Bunny Stream
+        3. Uploads to the selected active provider
         4. Updates status to COMPLETED
         
         ### 3. Memory Management

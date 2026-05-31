@@ -25,12 +25,24 @@ class DatabaseManager:
                     original_url TEXT UNIQUE,
                     status TEXT DEFAULT 'PENDING',
                     bunny_guid TEXT,
+                    upload_provider TEXT,
+                    upload_id TEXT,
                     local_filename TEXT,
                     error_message TEXT,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     updated_at DATETIME
                 )
             ''')
+            
+            # Migration check for existing SQLite database
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA table_info(videos)")
+            columns = [info[1] for info in cursor.fetchall()]
+            if 'upload_provider' not in columns:
+                conn.execute("ALTER TABLE videos ADD COLUMN upload_provider TEXT")
+            if 'upload_id' not in columns:
+                conn.execute("ALTER TABLE videos ADD COLUMN upload_id TEXT")
+                
             conn.commit()
             conn.close()
     

@@ -20,11 +20,26 @@ if "connect_timeout" not in DATABASE_URL:
     )
 
 # ============================================================================
-# BUNNY STREAM API CONFIGURATION
+# VIDEO UPLOAD PROVIDER CONFIGURATION
 # ============================================================================
+UPLOAD_PROVIDER = os.getenv("UPLOAD_PROVIDER", "doodstream").strip().lower()
+
+# Bunny Stream (Optional)
 BUNNY_API_KEY = os.getenv("BUNNY_API_KEY", "")
 BUNNY_LIBRARY_ID = os.getenv("BUNNY_LIBRARY_ID", "")
 BUNNY_BASE_URL = "https://video.bunnycdn.com/library"
+
+# DoodStream
+DOODSTREAM_API_KEY = os.getenv("DOODSTREAM_API_KEY", "")
+DOODSTREAM_BASE_URL = os.getenv("DOODSTREAM_BASE_URL", "https://doodapi.co")
+
+# StreamWish
+STREAMWISH_API_KEY = os.getenv("STREAMWISH_API_KEY", "")
+STREAMWISH_BASE_URL = os.getenv("STREAMWISH_BASE_URL", "https://api.streamwish.com")
+
+# LuluStream
+LULUSTREAM_API_KEY = os.getenv("LULUSTREAM_API_KEY", "")
+LULUSTREAM_BASE_URL = os.getenv("LULUSTREAM_BASE_URL", "https://lulustream.com")
 
 # ============================================================================
 # PROJECT PATHS
