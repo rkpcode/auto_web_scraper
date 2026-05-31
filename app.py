@@ -24,10 +24,10 @@ if os.getenv("SPACE_ID") and not os.path.exists("/home/user/.cache/ms-playwright
     print("🔧 Installing Playwright Chromium...")
     subprocess.run(["playwright", "install", "chromium"], check=True)
 
-from video_engine.database_supabase import db
-from video_engine.harvester import harvest_and_save
-from video_engine.pipeline_runner import process_video
-from video_engine.config import MAX_WORKERS, DEFAULT_MAX_PAGES, UPLOAD_PROVIDER
+from database_supabase import db
+from harvester import harvest_and_save
+from pipeline_runner import process_video
+from config import MAX_WORKERS, DEFAULT_MAX_PAGES, UPLOAD_PROVIDER
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
@@ -185,6 +185,13 @@ def start_processing():
     return f"🚀 Processing started for {pending_count} videos with {MAX_WORKERS} workers...\nCheck stats below for progress..."
 
 
+def change_upload_provider(provider):
+    """Dynamically switch the upload provider in config."""
+    import config
+    config.UPLOAD_PROVIDER = provider.strip().lower()
+    return f"🔄 Active upload provider successfully changed to: {provider.upper()}!"
+
+
 # ============================================================================
 # STATS REFRESH (Called every 5 seconds)
 # ============================================================================
@@ -197,7 +204,8 @@ def get_live_stats():
         current_state = state.get_state()
         
         # Build stats table
-        stats_md = f"**Active Upload Provider:** `{UPLOAD_PROVIDER.upper()}`\n\n"
+        import config
+        stats_md = f"**Active Upload Provider:** `{config.UPLOAD_PROVIDER.upper()}`\n\n"
         stats_md += "### 📊 Database Statistics\n\n"
         stats_md += "| Status | Count |\n|--------|-------|\n"
         
@@ -275,6 +283,13 @@ with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
             gr.Markdown("---")
             gr.Markdown("## 🚀 Phase B: Processing")
             
+            provider_dropdown = gr.Dropdown(
+                choices=["doodstream", "streamwish", "lulustream", "bunny"],
+                value=UPLOAD_PROVIDER,
+                label="Select Active Upload Provider",
+                info="Switch hosts dynamically before processing!"
+            )
+            
             processing_btn = gr.Button("🚀 Start Processing", variant="secondary", size="lg")
             processing_output = gr.Textbox(label="Processing Status", lines=3, interactive=False)
         
@@ -289,6 +304,12 @@ with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
         fn=start_discovery,
         inputs=[website_input, max_pages_slider, start_page_slider],
         outputs=discovery_output
+    )
+    
+    provider_dropdown.change(
+        fn=change_upload_provider,
+        inputs=provider_dropdown,
+        outputs=processing_output
     )
     
     processing_btn.click(

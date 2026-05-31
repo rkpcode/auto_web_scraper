@@ -69,8 +69,9 @@ def process_video(url):
             db.update_status(url, 'UPLOADING', local_filename=filename)
             uploader = get_uploader()
             
-            # Get selected provider name to store in DB
-            from config import UPLOAD_PROVIDER
+            # Get selected provider name to store in DB dynamically
+            import config
+            upload_provider = config.UPLOAD_PROVIDER
             
             # Create/upload video
             video_title = title or filename
@@ -79,13 +80,13 @@ def process_video(url):
             # 6. Mark as completed
             db_kwargs = {
                 'upload_id': upload_id,
-                'upload_provider': UPLOAD_PROVIDER
+                'upload_provider': upload_provider
             }
-            if UPLOAD_PROVIDER == 'bunny':
+            if upload_provider == 'bunny':
                 db_kwargs['bunny_guid'] = upload_id
                 
             db.update_status(url, 'COMPLETED', **db_kwargs)
-            logger.info(f"SUCCESS: {url} -> {UPLOAD_PROVIDER.upper()} ID: {upload_id}")
+            logger.info(f"SUCCESS: {url} -> {upload_provider.upper()} ID: {upload_id}")
         
         finally:
             # GUARANTEED cleanup (even if upload fails)

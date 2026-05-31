@@ -138,8 +138,8 @@ def get_uploader(provider=None) -> BaseUploader:
     If provider is not passed, it uses UPLOAD_PROVIDER from config.
     """
     if provider is None:
-        from config import UPLOAD_PROVIDER
-        provider = UPLOAD_PROVIDER
+        import config
+        provider = config.UPLOAD_PROVIDER
     
     provider = provider.strip().lower()
     
