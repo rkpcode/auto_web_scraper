@@ -75,9 +75,6 @@ state = PipelineState()
 # ============================================================================
 # PHASE A: DISCOVERY (Background Thread)
 # ============================================================================
-# ============================================================================
-# PHASE A: DISCOVERY (Background Thread)
-# ============================================================================
 def run_discovery_background(website_url, max_pages, start_page=1):
     """Run harvester in background thread."""
     try:
@@ -151,7 +148,7 @@ def run_processing_background(max_workers):
                 try:
                     future.result()
                     completed += 1
-                except:
+                except Exception:
                     failed += 1
                 
                 # Update stats periodically
@@ -200,6 +197,7 @@ def get_live_stats():
     try:
         db_stats = db.get_stats()
         total = db.get_total_count()
+        provider_stats = db.get_provider_stats()
         
         current_state = state.get_state()
         
@@ -213,6 +211,27 @@ def get_live_stats():
             stats_md += f"| {status} | {count} |\n"
         
         stats_md += f"| **TOTAL** | **{total}** |\n\n"
+        
+        # Provider-wise upload stats
+        if provider_stats:
+            provider_icons = {
+                'doodstream': '🟢',
+                'streamwish': '🔵', 
+                'lulustream': '🟣',
+                'bunny': '🟠',
+                'unknown': '⚪'
+            }
+            
+            stats_md += "### 🏢 Provider-wise Uploads\n\n"
+            stats_md += "| Provider | Completed |\n|----------|----------|\n"
+            
+            total_uploaded = 0
+            for provider, count in provider_stats.items():
+                icon = provider_icons.get(provider, '⚪')
+                stats_md += f"| {icon} {provider.upper()} | {count} |\n"
+                total_uploaded += count
+            
+            stats_md += f"| **TOTAL UPLOADED** | **{total_uploaded}** |\n\n"
         
         # Add phase status
         stats_md += "### 🔄 Pipeline Status\n\n"

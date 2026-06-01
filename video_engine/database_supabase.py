@@ -6,6 +6,7 @@ CRITICAL: Uses context managers to prevent "Too many clients" error.
 """
 import psycopg2
 from psycopg2 import sql, errors
+from psycopg2.extras import execute_values
 from contextlib import contextmanager
 from datetime import datetime
 import os
@@ -130,20 +131,26 @@ class SupabaseManager:
         
         try:
             with self.get_cursor() as cursor:
-                # Use executemany for batch insert
-                # ON CONFLICT ensures duplicates are silently ignored
+                # Use execute_values with RETURNING for accurate insert count
+                # NOTE: executemany + ON CONFLICT DO NOTHING gives wrong rowcount
                 insert_query = """
                     INSERT INTO videos (original_url, status, created_at)
-                    VALUES (%s, %s, CURRENT_TIMESTAMP)
+                    VALUES %s
                     ON CONFLICT (original_url) DO NOTHING
                 """
                 
-                data = [(url, status) for url in links_list]
+                data = [(url, status, 'now()') for url in links_list]
                 logger.debug(f"[SUPABASE] Executing batch insert for {len(data)} items...")
-                cursor.executemany(insert_query, data)
+                execute_values(
+                    cursor, 
+                    insert_query,
+                    data,
+                    template="(%s, %s, CURRENT_TIMESTAMP)",
+                    page_size=100
+                )
                 logger.debug("[SUPABASE] Batch insert execution complete.")
                 
-                # rowcount gives number of inserted rows (excluding duplicates)
+                # rowcount is accurate with execute_values
                 inserted_count = cursor.rowcount
                 logger.debug(f"[SUPABASE] Row count: {inserted_count}")
             
@@ -220,6 +227,12 @@ class SupabaseManager:
             logger.debug(f"Skipping duplicate URL: {url}")
             return False
     
+    # Whitelist of valid column names to prevent SQL injection in dynamic queries
+    ALLOWED_UPDATE_COLUMNS = {
+        'bunny_guid', 'upload_provider', 'upload_id', 
+        'local_filename', 'error_message'
+    }
+    
     def update_status(self, url, status, **kwargs):
         """
         Thread-safe status update with dynamic kwargs.
@@ -238,6 +251,10 @@ class SupabaseManager:
             params = [status]
             
             for key, value in kwargs.items():
+                # Validate column name against whitelist to prevent SQL injection
+                if key not in self.ALLOWED_UPDATE_COLUMNS:
+                    logger.warning(f"[SUPABASE] Ignoring unknown column: {key}")
+                    continue
                 set_clauses.append(f"{key} = %s")
                 params.append(value)
             
@@ -303,6 +320,29 @@ class SupabaseManager:
             stats = dict(cursor.fetchall())
         
         return stats
+    
+    def get_provider_stats(self):
+        """
+        Get per-provider upload statistics for monitoring dashboard.
+        
+        Returns:
+            dict: Provider counts (e.g., {'doodstream': 25, 'lulustream': 10})
+                  Only includes COMPLETED videos with a known provider.
+        """
+        with self.get_cursor() as cursor:
+            cursor.execute("""
+                SELECT 
+                    COALESCE(upload_provider, 'unknown') as provider,
+                    COUNT(*) as count
+                FROM videos 
+                WHERE status = 'COMPLETED' 
+                    AND upload_provider IS NOT NULL
+                GROUP BY upload_provider
+                ORDER BY count DESC
+            """)
+            provider_stats = dict(cursor.fetchall())
+        
+        return provider_stats
     
     def get_total_count(self):
         """Get total number of videos in database."""

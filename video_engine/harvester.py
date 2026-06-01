@@ -9,7 +9,7 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
 import re
 from core.logger import logger
-from video_engine.database_supabase import db
+from database_supabase import db
 import time
 import random
 from collections import deque
@@ -248,8 +248,6 @@ class LinkHarvester(BaseHarvester):
                     page_num += 1
                     continue
                     
-                response.raise_for_status()
-                
                 soup = BeautifulSoup(response.text, 'html.parser')
                 
                 # Find all links on this page

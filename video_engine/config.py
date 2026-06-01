@@ -50,6 +50,9 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMP_STORAGE_DIR = os.path.join(BASE_DIR, "temp_storage")
 os.makedirs(TEMP_STORAGE_DIR, exist_ok=True)
 
+# SQLite database path (used by legacy database.py module)
+DB_PATH = os.path.join(BASE_DIR, "videos.db")
+
 # Logging
 LOG_FILE_PATH = os.path.join(BASE_DIR, "pipeline.log")
 
