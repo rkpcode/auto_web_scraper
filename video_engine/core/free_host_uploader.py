@@ -143,6 +143,8 @@ class DoodStreamUploader(FreeHostBaseUploader):
 class SeekStreamingUploader(FreeHostBaseUploader):
     def __init__(self):
         from config import SEEKSTREAMING_API_KEY, SEEKSTREAMING_BASE_URL
+        if not SEEKSTREAMING_API_KEY:
+            raise ConfigurationError("SEEKSTREAMING_API_KEY or STREAMWISH_API_KEY must be set in environment")
         super().__init__(
             provider_name="seekstreaming",
             api_key=SEEKSTREAMING_API_KEY,
