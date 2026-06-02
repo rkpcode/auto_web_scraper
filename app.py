@@ -228,7 +228,7 @@ def get_live_stats():
         if provider_stats:
             provider_icons = {
                 'doodstream': '🟢',
-                'streamwish': '🔵', 
+                'seekstreaming': '🔵', 
                 'lulustream': '🟣',
                 'bunny': '🟠',
                 'unknown': '⚪'
@@ -315,7 +315,7 @@ with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
             gr.Markdown("## 🚀 Phase B: Processing")
             
             provider_dropdown = gr.Dropdown(
-                choices=["doodstream", "streamwish", "lulustream", "bunny"],
+                choices=["doodstream", "seekstreaming", "lulustream", "bunny"],
                 value=UPLOAD_PROVIDER,
                 label="Select Active Upload Provider",
                 info="Switch hosts dynamically before processing!"
@@ -374,9 +374,9 @@ with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
         ### 1. Environment Variables (HF Spaces Secrets)
         
         - `DATABASE_URL`: Supabase connection string (PostgreSQL)
-        - `UPLOAD_PROVIDER`: Selected video upload provider (`doodstream` (default), `streamwish`, `lulustream`, or `bunny`)
+        - `UPLOAD_PROVIDER`: Selected video upload provider (`doodstream` (default), `seekstreaming`, `lulustream`, or `bunny`)
         - `DOODSTREAM_API_KEY`: DoodStream API key (and optional `DOODSTREAM_BASE_URL`)
-        - `STREAMWISH_API_KEY`: StreamWish API key (and optional `STREAMWISH_BASE_URL`)
+        - `SEEKSTREAMING_API_KEY`: SeekStreaming API key (and optional `SEEKSTREAMING_BASE_URL`)
         - `LULUSTREAM_API_KEY`: LuluStream API key (and optional `LULUSTREAM_BASE_URL`)
         - `BUNNY_API_KEY`: Bunny Stream API key (optional)
         - `BUNNY_LIBRARY_ID`: Bunny Stream library ID (optional)

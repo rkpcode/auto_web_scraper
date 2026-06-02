@@ -7,7 +7,7 @@ from core.uploader import BaseUploader
 
 class FreeHostBaseUploader(BaseUploader):
     """
-    Base uploader for free host services like DoodStream, StreamWish, and LuluStream.
+    Base uploader for free host services like DoodStream, SeekStreaming, and LuluStream.
     These platforms use a common 2-step uploading pattern:
     1. GET {api_base}/api/upload/server?key={api_key} -> returns upload server URL
     2. POST {upload_server_url} with multipart form-data (file, key/api_key) -> returns filecode
@@ -75,7 +75,7 @@ class FreeHostBaseUploader(BaseUploader):
         logger.info(f"📂 File size: {file_size_mb:.2f}MB")
 
         # Prepare multipart fields
-        # Note: DoodStream requires 'api_key', StreamWish/LuluStream require 'key'
+        # Note: DoodStream requires 'api_key', SeekStreaming/LuluStream require 'key'
         fields = {self.key_param_name: self.api_key}
 
         try:
@@ -140,14 +140,14 @@ class DoodStreamUploader(FreeHostBaseUploader):
         )
 
 
-class StreamWishUploader(FreeHostBaseUploader):
+class SeekStreamingUploader(FreeHostBaseUploader):
     def __init__(self):
-        from config import STREAMWISH_API_KEY, STREAMWISH_BASE_URL
+        from config import SEEKSTREAMING_API_KEY, SEEKSTREAMING_BASE_URL
         super().__init__(
-            provider_name="streamwish",
-            api_key=STREAMWISH_API_KEY,
-            base_url=STREAMWISH_BASE_URL,
-            key_param_name="key"      # StreamWish POST param is key
+            provider_name="seekstreaming",
+            api_key=SEEKSTREAMING_API_KEY,
+            base_url=SEEKSTREAMING_BASE_URL,
+            key_param_name="key"      # SeekStreaming POST param is key
         )
 
 

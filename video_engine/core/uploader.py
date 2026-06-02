@@ -148,9 +148,9 @@ def get_uploader(provider=None) -> BaseUploader:
     elif provider == "doodstream":
         from core.free_host_uploader import DoodStreamUploader
         return DoodStreamUploader()
-    elif provider == "streamwish":
-        from core.free_host_uploader import StreamWishUploader
-        return StreamWishUploader()
+    elif provider == "seekstreaming":
+        from core.free_host_uploader import SeekStreamingUploader
+        return SeekStreamingUploader()
     elif provider == "lulustream":
         from core.free_host_uploader import LuluStreamUploader
         return LuluStreamUploader()

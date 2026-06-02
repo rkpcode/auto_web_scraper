@@ -33,9 +33,9 @@ BUNNY_BASE_URL = "https://video.bunnycdn.com/library"
 DOODSTREAM_API_KEY = os.getenv("DOODSTREAM_API_KEY", "")
 DOODSTREAM_BASE_URL = os.getenv("DOODSTREAM_BASE_URL", "https://doodapi.co")
 
-# StreamWish
-STREAMWISH_API_KEY = os.getenv("STREAMWISH_API_KEY", "")
-STREAMWISH_BASE_URL = os.getenv("STREAMWISH_BASE_URL", "https://api.streamwish.com")
+# SeekStreaming
+SEEKSTREAMING_API_KEY = os.getenv("SEEKSTREAMING_API_KEY", "")
+SEEKSTREAMING_BASE_URL = os.getenv("SEEKSTREAMING_BASE_URL", "https://seekstreaming.com")
 
 # LuluStream
 LULUSTREAM_API_KEY = os.getenv("LULUSTREAM_API_KEY", "")

@@ -41,9 +41,9 @@ CREATE INDEX idx_created_at ON videos(created_at);
 In Hugging Face Spaces Settings > Variables and Secrets, add:
 
 - `DATABASE_URL`: Your Supabase connection string (PostgreSQL URI)
-- `UPLOAD_PROVIDER`: Selected video upload provider (`doodstream` (default), `streamwish`, `lulustream`, or `bunny`)
+- `UPLOAD_PROVIDER`: Selected video upload provider (`doodstream` (default), `seekstreaming`, `lulustream`, or `bunny`)
 - `DOODSTREAM_API_KEY`: DoodStream API key (and optional `DOODSTREAM_BASE_URL` if they change URL)
-- `STREAMWISH_API_KEY`: StreamWish API key (and optional `STREAMWISH_BASE_URL`)
+- `SEEKSTREAMING_API_KEY`: SeekStreaming API key (and optional `SEEKSTREAMING_BASE_URL`)
 - `LULUSTREAM_API_KEY`: LuluStream API key (and optional `LULUSTREAM_BASE_URL`)
 - `BUNNY_API_KEY`: Bunny Stream API key (optional, only needed if UPLOAD_PROVIDER=bunny)
 - `BUNNY_LIBRARY_ID`: Bunny Stream library ID (optional, only needed if UPLOAD_PROVIDER=bunny)
