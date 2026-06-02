@@ -152,6 +152,108 @@ class SeekStreamingUploader(FreeHostBaseUploader):
             key_param_name="key"      # SeekStreaming POST param is key
         )
 
+    def upload(self, title, filepath):
+        """
+        Custom V2 TUS upload implementation for SeekStreaming.
+        """
+        url = f"{self.base_url}/api/v1/video/upload"
+        headers = {"api-token": self.api_key}
+        logger.info(f"🛰️  [SeekStreaming V2] Requesting TUS endpoints...")
+        
+        response = requests.get(url, headers=headers, timeout=30)
+        if response.status_code != 200:
+            raise UploadError(
+                f"Failed to get TUS upload server from SeekStreaming (HTTP {response.status_code})",
+                details=response.text[:200]
+            )
+            
+        try:
+            data = response.json()
+        except ValueError:
+            raise UploadError("Failed to parse JSON response from SeekStreaming", details=response.text[:200])
+            
+        tus_url = data.get("tusUrl")
+        access_token = data.get("accessToken")
+        
+        if not tus_url or not access_token:
+            raise UploadError("Invalid upload credentials received from SeekStreaming", details=str(data))
+            
+        logger.info(f"✅ TUS URL received: {tus_url}")
+        
+        filename = os.path.basename(filepath)
+        file_size = os.path.getsize(filepath)
+        
+        import base64
+        b64_token = base64.b64encode(access_token.encode()).decode()
+        b64_filename = base64.b64encode(filename.encode()).decode()
+        b64_filetype = base64.b64encode(b"video/mp4").decode()
+        
+        metadata_str = f"accessToken {b64_token},filename {b64_filename},filetype {b64_filetype}"
+        
+        tus_headers = {
+            "Tus-Resumable": "1.0.0",
+            "Upload-Length": str(file_size),
+            "Upload-Metadata": metadata_str,
+            "metadata": f"accessToken={access_token},filename={filename},filetype=video/mp4"
+        }
+        
+        logger.info(f"🛰️  [SeekStreaming V2] Initializing TUS session...")
+        init_response = requests.post(tus_url, headers=tus_headers, timeout=60)
+        
+        if init_response.status_code not in (201, 200):
+            raise UploadError(
+                f"Failed to initialize TUS session (HTTP {init_response.status_code})",
+                details=init_response.text[:200]
+            )
+            
+        from urllib.parse import urljoin
+        upload_url = init_response.headers.get("Location")
+        if not upload_url:
+            raise UploadError("TUS server did not return Location header for upload", details=str(init_response.headers))
+        upload_url = urljoin(tus_url, upload_url)
+            
+        logger.info(f"✅ TUS upload session initialized successfully. URL: {upload_url}")
+        
+        logger.info(f"⬆️  [SeekStreaming V2] Uploading binary of size {file_size / (1024*1024):.2f}MB...")
+        
+        patch_headers = {
+            "Tus-Resumable": "1.0.0",
+            "Upload-Offset": "0",
+            "Content-Type": "application/offset+octet-stream",
+            "Upload-Metadata": metadata_str
+        }
+        
+        try:
+            with open(filepath, 'rb') as f:
+                patch_response = requests.patch(upload_url, headers=patch_headers, data=f, timeout=1200)
+        except Exception as e:
+            raise UploadError("TUS patch request failed", details=str(e))
+            
+        if patch_response.status_code not in (204, 200):
+            raise UploadError(
+                f"TUS upload PATCH failed (HTTP {patch_response.status_code})",
+                details=patch_response.text[:200]
+            )
+            
+        logger.info("✅ TUS upload PATCH complete.")
+        
+        filecode = upload_url.rstrip("/").split("/")[-1]
+        
+        try:
+            res_data = patch_response.json()
+            if res_data and "filecode" in res_data:
+                filecode = res_data.get("filecode")
+            elif res_data and "id" in res_data:
+                filecode = res_data.get("id")
+        except Exception:
+            pass
+            
+        if not filecode:
+            raise UploadError("Failed to extract filecode from TUS upload session", details=upload_url)
+            
+        logger.info(f"🎉 SeekStreaming upload successful! Filecode: {filecode}")
+        return filecode
+
 
 class LuluStreamUploader(FreeHostBaseUploader):
     def __init__(self):
