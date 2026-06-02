@@ -116,6 +116,28 @@ class SupabaseManager:
                 SET upload_provider = 'seekstreaming' 
                 WHERE upload_provider = 'streamwish'
             """)
+            
+            # Backfill migration: copy old upload_id values to their respective new provider-specific columns
+            cursor.execute("""
+                UPDATE videos 
+                SET doodstream_id = upload_id 
+                WHERE upload_provider = 'doodstream' AND doodstream_id IS NULL AND upload_id IS NOT NULL
+            """)
+            cursor.execute("""
+                UPDATE videos 
+                SET seekstreaming_id = upload_id 
+                WHERE upload_provider = 'seekstreaming' AND seekstreaming_id IS NULL AND upload_id IS NOT NULL
+            """)
+            cursor.execute("""
+                UPDATE videos 
+                SET lulustream_id = upload_id 
+                WHERE upload_provider = 'lulustream' AND lulustream_id IS NULL AND upload_id IS NOT NULL
+            """)
+            cursor.execute("""
+                UPDATE videos 
+                SET bunny_guid = upload_id 
+                WHERE upload_provider = 'bunny' AND bunny_guid IS NULL AND upload_id IS NOT NULL
+            """)
     
     def bulk_seed_links(self, links, status='PENDING'):
         """
