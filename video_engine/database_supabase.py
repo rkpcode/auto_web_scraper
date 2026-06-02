@@ -96,7 +96,10 @@ class SupabaseManager:
             cursor.execute("""
                 ALTER TABLE videos 
                 ADD COLUMN IF NOT EXISTS upload_provider TEXT,
-                ADD COLUMN IF NOT EXISTS upload_id TEXT
+                ADD COLUMN IF NOT EXISTS upload_id TEXT,
+                ADD COLUMN IF NOT EXISTS doodstream_id TEXT,
+                ADD COLUMN IF NOT EXISTS seekstreaming_id TEXT,
+                ADD COLUMN IF NOT EXISTS lulustream_id TEXT
             """)
             
             # Create indexes for faster queries
@@ -176,7 +179,7 @@ class SupabaseManager:
     
     def get_pending_videos(self, current_provider=None):
         """
-        Get all URLs with status PENDING, FAILED, or COMPLETED with a different upload provider.
+        Get all URLs with status PENDING, FAILED, or COMPLETED where the specific provider's column is null.
         
         Args:
             current_provider (str, optional): The currently selected upload provider.
@@ -186,13 +189,31 @@ class SupabaseManager:
         """
         with self.get_cursor() as cursor:
             if current_provider:
-                cursor.execute("""
-                    SELECT original_url 
-                    FROM videos 
-                    WHERE status IN ('PENDING', 'FAILED')
-                       OR (status = 'COMPLETED' AND (upload_provider IS NULL OR upload_provider != %s))
-                    ORDER BY created_at ASC
-                """, (current_provider,))
+                provider = current_provider.strip().lower()
+                prov_col = {
+                    'doodstream': 'doodstream_id',
+                    'seekstreaming': 'seekstreaming_id',
+                    'lulustream': 'lulustream_id',
+                    'bunny': 'bunny_guid'
+                }.get(provider)
+                
+                if prov_col:
+                    query = f"""
+                        SELECT original_url 
+                        FROM videos 
+                        WHERE status IN ('PENDING', 'FAILED')
+                           OR (status = 'COMPLETED' AND {prov_col} IS NULL)
+                        ORDER BY created_at ASC
+                    """
+                    cursor.execute(query)
+                else:
+                    cursor.execute("""
+                        SELECT original_url 
+                        FROM videos 
+                        WHERE status IN ('PENDING', 'FAILED')
+                           OR (status = 'COMPLETED' AND (upload_provider IS NULL OR upload_provider != %s))
+                        ORDER BY created_at ASC
+                    """, (provider,))
             else:
                 cursor.execute("""
                     SELECT original_url 
@@ -242,6 +263,37 @@ class SupabaseManager:
         
         return result if result else None
 
+    def get_all_upload_ids(self, url):
+        """
+        Get status and all upload details of a specific video to support side-by-side storage.
+        
+        Args:
+            url: Video page URL
+            
+        Returns:
+            dict: {status, upload_provider, upload_id, doodstream_id, seekstreaming_id, lulustream_id, bunny_guid} or None if not found
+        """
+        with self.get_cursor() as cursor:
+            cursor.execute("""
+                SELECT status, upload_provider, upload_id, doodstream_id, seekstreaming_id, lulustream_id, bunny_guid 
+                FROM videos 
+                WHERE original_url = %s
+            """, (url,))
+            row = cursor.fetchone()
+            
+        if not row:
+            return None
+            
+        return {
+            'status': row[0],
+            'upload_provider': row[1],
+            'upload_id': row[2],
+            'doodstream_id': row[3],
+            'seekstreaming_id': row[4],
+            'lulustream_id': row[5],
+            'bunny_guid': row[6]
+        }
+
     def clean_failed_videos(self):
         """
         Delete all videos with status 'FAILED' from the database.
@@ -283,7 +335,8 @@ class SupabaseManager:
     # Whitelist of valid column names to prevent SQL injection in dynamic queries
     ALLOWED_UPDATE_COLUMNS = {
         'bunny_guid', 'upload_provider', 'upload_id', 
-        'local_filename', 'error_message'
+        'local_filename', 'error_message',
+        'doodstream_id', 'seekstreaming_id', 'lulustream_id'
     }
     
     def update_status(self, url, status, **kwargs):
@@ -375,6 +428,13 @@ class SupabaseManager:
                 return dict(cursor.fetchall())
         
         provider = provider.strip().lower()
+        prov_col = {
+            'doodstream': 'doodstream_id',
+            'seekstreaming': 'seekstreaming_id',
+            'lulustream': 'lulustream_id',
+            'bunny': 'bunny_guid'
+        }.get(provider)
+        
         with self.get_cursor() as cursor:
             # Get other statuses (EXTRACTING, DOWNLOADING, UPLOADING, FAILED)
             cursor.execute("""
@@ -385,20 +445,35 @@ class SupabaseManager:
             """)
             stats = dict(cursor.fetchall())
             
-            # Get completed count for this provider
-            cursor.execute("""
-                SELECT COUNT(*) FROM videos 
-                WHERE status = 'COMPLETED' AND upload_provider = %s
-            """, (provider,))
-            stats['COMPLETED'] = cursor.fetchone()[0]
-            
-            # Get pending count for this provider
-            cursor.execute("""
-                SELECT COUNT(*) FROM videos 
-                WHERE status = 'PENDING' 
-                   OR (status = 'COMPLETED' AND (upload_provider IS NULL OR upload_provider != %s))
-            """, (provider,))
-            stats['PENDING'] = cursor.fetchone()[0]
+            if prov_col:
+                # Completed means status is COMPLETED and the provider column is not null
+                cursor.execute(f"""
+                    SELECT COUNT(*) FROM videos 
+                    WHERE status = 'COMPLETED' AND {prov_col} IS NOT NULL
+                """)
+                stats['COMPLETED'] = cursor.fetchone()[0]
+                
+                # Pending means status is PENDING or (COMPLETED and provider column is null)
+                cursor.execute(f"""
+                    SELECT COUNT(*) FROM videos 
+                    WHERE status = 'PENDING' 
+                       OR (status = 'COMPLETED' AND {prov_col} IS NULL)
+                """)
+                stats['PENDING'] = cursor.fetchone()[0]
+            else:
+                # Fallback if unknown provider
+                cursor.execute("""
+                    SELECT COUNT(*) FROM videos 
+                    WHERE status = 'COMPLETED' AND upload_provider = %s
+                """, (provider,))
+                stats['COMPLETED'] = cursor.fetchone()[0]
+                
+                cursor.execute("""
+                    SELECT COUNT(*) FROM videos 
+                    WHERE status = 'PENDING' 
+                       OR (status = 'COMPLETED' AND (upload_provider IS NULL OR upload_provider != %s))
+                """, (provider,))
+                stats['PENDING'] = cursor.fetchone()[0]
             
         return stats
     

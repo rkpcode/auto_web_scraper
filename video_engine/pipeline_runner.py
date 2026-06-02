@@ -46,12 +46,25 @@ def process_video(url):
             
         current_provider = config.UPLOAD_PROVIDER
         
-        video_details = db.get_video_details(url)
-        if video_details:
-            status, upload_provider = video_details
-            if status == 'COMPLETED' and upload_provider == current_provider:
-                logger.info(f"Skipping {url} (already COMPLETED on {current_provider})")
-                return
+        # Get all upload details to support simultaneous multi-provider uploads without duplicates
+        upload_details = db.get_all_upload_ids(url)
+        if upload_details:
+            status = upload_details['status']
+            prov_col = {
+                'doodstream': 'doodstream_id',
+                'seekstreaming': 'seekstreaming_id',
+                'lulustream': 'lulustream_id',
+                'bunny': 'bunny_guid'
+            }.get(current_provider)
+            
+            # Skip if already completed for the CURRENT active provider
+            if status == 'COMPLETED':
+                if prov_col and upload_details.get(prov_col):
+                    logger.info(f"Skipping {url} (already COMPLETED on {current_provider} with ID: {upload_details[prov_col]})")
+                    return
+                elif not prov_col and upload_details['upload_provider'] == current_provider:
+                    logger.info(f"Skipping {url} (already COMPLETED on {current_provider})")
+                    return
         else:
             db.insert_video(url)
         
@@ -94,6 +107,12 @@ def process_video(url):
             }
             if upload_provider == 'bunny':
                 db_kwargs['bunny_guid'] = upload_id
+            elif upload_provider == 'doodstream':
+                db_kwargs['doodstream_id'] = upload_id
+            elif upload_provider == 'seekstreaming':
+                db_kwargs['seekstreaming_id'] = upload_id
+            elif upload_provider == 'lulustream':
+                db_kwargs['lulustream_id'] = upload_id
                 
             db.update_status(url, 'COMPLETED', **db_kwargs)
             logger.info(f"SUCCESS: {url} -> {upload_provider.upper()} ID: {upload_id}")
