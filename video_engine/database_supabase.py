@@ -106,6 +106,13 @@ class SupabaseManager:
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_created_at ON videos(created_at)
             """)
+            
+            # Migrate any old streamwish entries to seekstreaming
+            cursor.execute("""
+                UPDATE videos 
+                SET upload_provider = 'seekstreaming' 
+                WHERE upload_provider = 'streamwish'
+            """)
     
     def bulk_seed_links(self, links, status='PENDING'):
         """

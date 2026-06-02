@@ -23,6 +23,8 @@ if "connect_timeout" not in DATABASE_URL:
 # VIDEO UPLOAD PROVIDER CONFIGURATION
 # ============================================================================
 UPLOAD_PROVIDER = os.getenv("UPLOAD_PROVIDER", "doodstream").strip().lower()
+if UPLOAD_PROVIDER == "streamwish":
+    UPLOAD_PROVIDER = "seekstreaming"
 
 # Bunny Stream (Optional)
 BUNNY_API_KEY = os.getenv("BUNNY_API_KEY", "")

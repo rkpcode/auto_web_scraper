@@ -187,8 +187,11 @@ def start_processing():
 def change_upload_provider(provider):
     """Dynamically switch the upload provider in config."""
     import config
-    config.UPLOAD_PROVIDER = provider.strip().lower()
-    return f"🔄 Active upload provider successfully changed to: {provider.upper()}!"
+    prov = provider.strip().lower()
+    if prov == "streamwish":
+        prov = "seekstreaming"
+    config.UPLOAD_PROVIDER = prov
+    return f"🔄 Active upload provider successfully changed to: {prov.upper()}!"
 
 
 def run_ui_maintenance():
