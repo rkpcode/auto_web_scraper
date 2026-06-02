@@ -98,13 +98,21 @@ class FreeHostBaseUploader(BaseUploader):
 
         # Parse filecode from response
         # Typically response is like {"status":200,"msg":"OK","result":[{"filecode":"...","fn":"...","status":"OK"}]}
-        if not data or ("result" not in data and "filecode" not in data):
+        # LuluStream returns {"status":200,"msg":"OK","files":[{"filecode":"...","filename":"...","status":"OK"}]}
+        if not data or ("result" not in data and "filecode" not in data and "files" not in data):
             raise UploadError(f"Invalid upload response from {self.provider_name}", details=str(data))
 
-        result = data.get("result")
+        result = data.get("result") or data.get("files")
         filecode = None
 
         if isinstance(result, list) and len(result) > 0:
+            # Check if any file has an error status like "video is too short"
+            file_status = result[0].get("status", "OK")
+            if file_status != "OK":
+                raise UploadError(
+                    f"Upload rejected by {self.provider_name} server", 
+                    details=str(result[0])
+                )
             filecode = result[0].get("filecode")
         elif isinstance(result, dict):
             filecode = result.get("filecode")
