@@ -43,6 +43,9 @@ class DatabaseManager:
             if 'upload_id' not in columns:
                 conn.execute("ALTER TABLE videos ADD COLUMN upload_id TEXT")
                 
+            # Migrate any old streamwish entries to seekstreaming
+            conn.execute("UPDATE videos SET upload_provider = 'seekstreaming' WHERE upload_provider = 'streamwish'")
+                 
             conn.commit()
             conn.close()
     

@@ -142,6 +142,8 @@ def get_uploader(provider=None) -> BaseUploader:
         provider = config.UPLOAD_PROVIDER
     
     provider = provider.strip().lower()
+    if provider == "streamwish":
+        provider = "seekstreaming"
     
     if provider == "bunny":
         return BunnyUploader()
