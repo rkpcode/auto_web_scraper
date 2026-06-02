@@ -35,13 +35,18 @@ def process_video(url):
     
     try:
         # 1. Check if already processed
-        status = db.get_video_status(url)
-        if status == 'COMPLETED':
-            logger.info(f"Skipping {url} (already COMPLETED)")
-            return
+        # To support switching providers, we check if the video has already been completed on the current provider
+        import config
+        current_provider = config.UPLOAD_PROVIDER
         
-        # Insert if new
-        if status is None:
+        video_details = db.get_video_details(url)
+        if video_details:
+            status, upload_provider = video_details
+            if status == 'COMPLETED' and upload_provider == current_provider:
+                logger.info(f"Skipping {url} (already COMPLETED on {current_provider})")
+                return
+        else:
+            status = None
             db.insert_video(url)
         
         # 2. Check disk space before proceeding
@@ -137,8 +142,9 @@ def main():
     if stale_count > 0:
         logger.info(f"Reset {stale_count} stale statuses to PENDING")
     
-    # Get pending/failed URLs from database
-    pending_urls = db.get_pending_urls()
+    # Get pending/failed URLs from database (including completed videos on other providers)
+    import config
+    pending_urls = db.get_pending_urls(current_provider=config.UPLOAD_PROVIDER)
     
     if not pending_urls:
         logger.info("No pending URLs in database")

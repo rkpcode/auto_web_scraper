@@ -65,18 +65,27 @@ class DatabaseManager:
             conn.close()
             return affected
     
-    def get_pending_urls(self):
-        """Returns all PENDING or FAILED URLs for crash recovery."""
+    def get_pending_urls(self, current_provider=None):
+        """Returns all PENDING or FAILED URLs, or COMPLETED URLs with a different upload provider for crash recovery."""
         with self.lock:
             conn = sqlite3.connect(self.db_path, timeout=60.0, isolation_level='DEFERRED')
             conn.execute('PRAGMA busy_timeout = 60000')  # 60 second busy timeout
             cursor = conn.cursor()
-            cursor.execute("""
-                SELECT original_url 
-                FROM videos 
-                WHERE status IN ('PENDING', 'FAILED')
-                ORDER BY created_at ASC
-            """)
+            if current_provider:
+                cursor.execute("""
+                    SELECT original_url 
+                    FROM videos 
+                    WHERE status IN ('PENDING', 'FAILED')
+                       OR (status = 'COMPLETED' AND (upload_provider IS NULL OR upload_provider != ?))
+                    ORDER BY created_at ASC
+                """, (current_provider,))
+            else:
+                cursor.execute("""
+                    SELECT original_url 
+                    FROM videos 
+                    WHERE status IN ('PENDING', 'FAILED')
+                    ORDER BY created_at ASC
+                """)
             urls = [row[0] for row in cursor.fetchall()]
             conn.close()
             return urls
@@ -91,6 +100,29 @@ class DatabaseManager:
             result = cursor.fetchone()
             conn.close()
             return result[0] if result else None
+
+    def get_video_details(self, url):
+        """Get status and upload_provider of a video by URL."""
+        with self.lock:
+            conn = sqlite3.connect(self.db_path, timeout=60.0, isolation_level='DEFERRED')
+            conn.execute('PRAGMA busy_timeout = 60000')  # 60 second busy timeout
+            cursor = conn.cursor()
+            cursor.execute("SELECT status, upload_provider FROM videos WHERE original_url = ?", (url,))
+            result = cursor.fetchone()
+            conn.close()
+            return result if result else None
+
+    def clean_failed_videos(self):
+        """Delete all videos with status 'FAILED' from the database."""
+        with self.lock:
+            conn = sqlite3.connect(self.db_path, timeout=60.0, isolation_level='DEFERRED')
+            conn.execute('PRAGMA busy_timeout = 60000')  # 60 second busy timeout
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM videos WHERE status = 'FAILED'")
+            affected = cursor.rowcount
+            conn.commit()
+            conn.close()
+            return affected
     
     def insert_video(self, url, status='PENDING'):
         """Insert a new video record."""

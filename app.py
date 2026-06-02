@@ -128,8 +128,9 @@ def run_processing_background(max_workers):
         if stale_count > 0:
             print(f"[PROCESSING] Reset {stale_count} stale videos")
         
-        # Get pending URLs
-        pending_urls = db.get_pending_videos()
+        # Get pending URLs (including completed videos on other providers)
+        import config
+        pending_urls = db.get_pending_videos(current_provider=config.UPLOAD_PROVIDER)
         
         if not pending_urls:
             print("[PROCESSING] No pending URLs")
@@ -166,8 +167,9 @@ def start_processing():
     if state.processing_running:
         return "⚠️ Processing already running. Please wait..."
     
-    # Check if there are pending videos
-    pending_count = len(db.get_pending_videos())
+    # Check if there are pending videos (including completed videos on other providers)
+    import config
+    pending_count = len(db.get_pending_videos(current_provider=config.UPLOAD_PROVIDER))
     if pending_count == 0:
         return "❌ No pending videos to process. Run discovery first."
     
@@ -311,6 +313,11 @@ with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
             
             processing_btn = gr.Button("🚀 Start Processing", variant="secondary", size="lg")
             processing_output = gr.Textbox(label="Processing Status", lines=3, interactive=False)
+            
+            gr.Markdown("---")
+            gr.Markdown("## 🛠️ Database Maintenance")
+            maintenance_btn = gr.Button("🧹 Clean Failed Videos & Reset Stuck Tasks", variant="stop", size="lg")
+            maintenance_output = gr.Textbox(label="Maintenance Status", lines=2, interactive=False)
         
         with gr.Column(scale=1):
             gr.Markdown("## 📊 Live Dashboard")
@@ -334,6 +341,19 @@ with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
     processing_btn.click(
         fn=start_processing,
         outputs=processing_output
+    )
+    
+    def run_ui_maintenance():
+        try:
+            deleted = db.clean_failed_videos()
+            reset = db.reset_stale_statuses()
+            return f"✅ Maintenance Complete!\n- Removed {deleted} failed videos.\n- Reset {reset} stuck/zombie tasks to PENDING."
+        except Exception as e:
+            return f"❌ Maintenance failed: {str(e)}"
+
+    maintenance_btn.click(
+        fn=run_ui_maintenance,
+        outputs=maintenance_output
     )
     
     refresh_btn.click(

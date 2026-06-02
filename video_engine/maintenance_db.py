@@ -34,33 +34,11 @@ def clean_database():
     # 2. Identify failed entries to clean
     print("\n2. Cleaning up failed entries...")
     
-    cleanup_patterns = [
-        "No video URLs intercepted",
-        "404",
-        "Navigating to page failed",
-        "Timeout",
-        "Skipping non-video page"
-    ]
-    
-    deleted_count = 0
-    
-    with db.get_cursor() as cursor:
-        for pattern in cleanup_patterns:
-            query = """
-                DELETE FROM videos 
-                WHERE status = 'FAILED' 
-                AND error_message LIKE %s
-            """
-            cursor.execute(query, (f"%{pattern}%",))
-            count = cursor.rowcount
-            if count > 0:
-                print(f"   Removed {count} entries with error containing: '{pattern}'")
-                deleted_count += count
-    
+    deleted_count = db.clean_failed_videos()
     if deleted_count == 0:
-        print("   No matching failed entries found to clean.")
+        print("   No failed entries found to clean.")
     else:
-        print(f"   Total entries removed: {deleted_count}")
+        print(f"   Total failed entries removed: {deleted_count}")
 
     # 3. Reset stale statuses
     print("\n3. Resetting stale statuses...")

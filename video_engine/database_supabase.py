@@ -167,20 +167,32 @@ class SupabaseManager:
         """
         return self.bulk_seed_links(links, status)
     
-    def get_pending_videos(self):
+    def get_pending_videos(self, current_provider=None):
         """
-        Get all URLs with status PENDING or FAILED for processing.
+        Get all URLs with status PENDING, FAILED, or COMPLETED with a different upload provider.
         
+        Args:
+            current_provider (str, optional): The currently selected upload provider.
+            
         Returns:
             list: URLs to process
         """
         with self.get_cursor() as cursor:
-            cursor.execute("""
-                SELECT original_url 
-                FROM videos 
-                WHERE status IN ('PENDING', 'FAILED')
-                ORDER BY created_at ASC
-            """)
+            if current_provider:
+                cursor.execute("""
+                    SELECT original_url 
+                    FROM videos 
+                    WHERE status IN ('PENDING', 'FAILED')
+                       OR (status = 'COMPLETED' AND (upload_provider IS NULL OR upload_provider != %s))
+                    ORDER BY created_at ASC
+                """, (current_provider,))
+            else:
+                cursor.execute("""
+                    SELECT original_url 
+                    FROM videos 
+                    WHERE status IN ('PENDING', 'FAILED')
+                    ORDER BY created_at ASC
+                """)
             urls = [row[0] for row in cursor.fetchall()]
         
         return urls
@@ -203,6 +215,40 @@ class SupabaseManager:
             result = cursor.fetchone()
         
         return result[0] if result else None
+
+    def get_video_details(self, url):
+        """
+        Get status and upload_provider of a specific video.
+        
+        Args:
+            url: Video page URL
+            
+        Returns:
+            tuple: (status, upload_provider) or None if not found
+        """
+        with self.get_cursor() as cursor:
+            cursor.execute(
+                "SELECT status, upload_provider FROM videos WHERE original_url = %s",
+                (url,)
+            )
+            result = cursor.fetchone()
+        
+        return result if result else None
+
+    def clean_failed_videos(self):
+        """
+        Delete all videos with status 'FAILED' from the database.
+        
+        Returns:
+            int: Number of deleted entries
+        """
+        with self.get_cursor() as cursor:
+            cursor.execute("DELETE FROM videos WHERE status = 'FAILED'")
+            affected = cursor.rowcount
+        
+        if affected > 0:
+            logger.info(f"[MAINTENANCE] Removed {affected} failed videos from the database")
+        return affected
     
     def insert_video(self, url, status='PENDING'):
         """
