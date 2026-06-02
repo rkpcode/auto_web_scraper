@@ -36,8 +36,8 @@ DOODSTREAM_API_KEY = os.getenv("DOODSTREAM_API_KEY", "")
 DOODSTREAM_BASE_URL = os.getenv("DOODSTREAM_BASE_URL", "https://doodapi.co")
 
 # SeekStreaming
-SEEKSTREAMING_API_KEY = os.getenv("SEEKSTREAMING_API_KEY", "")
-SEEKSTREAMING_BASE_URL = os.getenv("SEEKSTREAMING_BASE_URL", "https://seekstreaming.com")
+SEEKSTREAMING_API_KEY = os.getenv("SEEKSTREAMING_API_KEY") or os.getenv("STREAMWISH_API_KEY") or ""
+SEEKSTREAMING_BASE_URL = os.getenv("SEEKSTREAMING_BASE_URL") or os.getenv("STREAMWISH_BASE_URL") or "https://seekstreaming.com"
 
 # LuluStream
 LULUSTREAM_API_KEY = os.getenv("LULUSTREAM_API_KEY", "")
