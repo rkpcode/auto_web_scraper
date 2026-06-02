@@ -110,3 +110,6 @@ if IS_HF_SPACES:
     logging.warning("🚀 Running on Hugging Face Spaces - Optimizations enabled")
     logging.warning(f"   MAX_WORKERS: {MAX_WORKERS}")
     logging.warning(f"   Database: Supabase (PostgreSQL)")
+
+# Global cancel signal for active processing tasks
+STOP_PROCESSING = False

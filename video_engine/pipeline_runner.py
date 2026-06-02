@@ -38,9 +38,12 @@ def process_video(url):
     filepath = None
     
     try:
-        # 1. Check if already processed
-        # To support switching providers, we check if the video has already been completed on the current provider
+        # 1. Check if already processed or stop requested
         import config
+        if getattr(config, "STOP_PROCESSING", False):
+            logger.info(f"Stop requested. Skipping {url}")
+            return
+            
         current_provider = config.UPLOAD_PROVIDER
         
         video_details = db.get_video_details(url)

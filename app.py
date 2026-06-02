@@ -146,6 +146,12 @@ def run_processing_background(max_workers):
             futures = {executor.submit(process_video, url): url for url in pending_urls}
             
             for future in as_completed(futures):
+                if getattr(config, "STOP_PROCESSING", False):
+                    print("[PROCESSING] Stop requested! Cancelling unstarted tasks...")
+                    for f in futures:
+                        if not f.done():
+                            f.cancel()
+                    break
                 try:
                     future.result()
                     completed += 1
@@ -155,7 +161,10 @@ def run_processing_background(max_workers):
                 # Update stats periodically
                 state.update_processing_stats(completed, failed)
         
-        print(f"[PROCESSING] Complete: {completed} succeeded, {failed} failed")
+        if getattr(config, "STOP_PROCESSING", False):
+            print(f"[PROCESSING] Stopped. {completed} succeeded, {failed} failed, remainder cancelled.")
+        else:
+            print(f"[PROCESSING] Complete: {completed} succeeded, {failed} failed")
     except Exception as e:
         print(f"[PROCESSING] Error: {e}")
     finally:
@@ -167,8 +176,10 @@ def start_processing():
     if state.processing_running:
         return "⚠️ Processing already running. Please wait..."
     
-    # Check if there are pending videos (including completed videos on other providers)
     import config
+    config.STOP_PROCESSING = False  # Reset stop signal on start
+    
+    # Check if there are pending videos (including completed videos on other providers)
     pending_count = len(db.get_pending_videos(current_provider=config.UPLOAD_PROVIDER))
     if pending_count == 0:
         return "❌ No pending videos to process. Run discovery first."
@@ -182,6 +193,16 @@ def start_processing():
     thread.start()
     
     return f"🚀 Processing started for {pending_count} videos with {MAX_WORKERS} workers...\nCheck stats below for progress..."
+
+
+def stop_processing():
+    """Stop processing phase (non-blocking)."""
+    if not state.processing_running:
+        return "⚠️ Processing is not currently running."
+    
+    import config
+    config.STOP_PROCESSING = True
+    return "🛑 Stop signal sent! Active worker tasks will finish their current video download/upload step, and then the pipeline will stop gracefully."
 
 
 def change_upload_provider(provider):
@@ -324,7 +345,9 @@ with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
                 info="Switch hosts dynamically before processing!"
             )
             
-            processing_btn = gr.Button("🚀 Start Processing", variant="secondary", size="lg")
+            with gr.Row():
+                processing_btn = gr.Button("🚀 Start Processing", variant="primary", size="lg")
+                stop_btn = gr.Button("🛑 Stop Processing", variant="stop", size="lg")
             processing_output = gr.Textbox(label="Processing Status", lines=3, interactive=False)
             
             gr.Markdown("---")
@@ -353,6 +376,11 @@ with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
     
     processing_btn.click(
         fn=start_processing,
+        outputs=processing_output
+    )
+    
+    stop_btn.click(
+        fn=stop_processing,
         outputs=processing_output
     )
     
