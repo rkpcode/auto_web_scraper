@@ -139,7 +139,7 @@ class SupabaseManager:
                     ON CONFLICT (original_url) DO NOTHING
                 """
                 
-                data = [(url, status, 'now()') for url in links_list]
+                data = [(url, status) for url in links_list]
                 logger.debug(f"[SUPABASE] Executing batch insert for {len(data)} items...")
                 execute_values(
                     cursor, 

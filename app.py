@@ -191,6 +191,16 @@ def change_upload_provider(provider):
     return f"🔄 Active upload provider successfully changed to: {provider.upper()}!"
 
 
+def run_ui_maintenance():
+    """Run database maintenance: clean failed videos and reset stuck tasks."""
+    try:
+        deleted = db.clean_failed_videos()
+        reset = db.reset_stale_statuses()
+        return f"✅ Maintenance Complete!\n- Removed {deleted} failed videos.\n- Reset {reset} stuck/zombie tasks to PENDING."
+    except Exception as e:
+        return f"❌ Maintenance failed: {str(e)}"
+
+
 # ============================================================================
 # STATS REFRESH (Called every 5 seconds)
 # ============================================================================
@@ -343,14 +353,6 @@ with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
         outputs=processing_output
     )
     
-    def run_ui_maintenance():
-        try:
-            deleted = db.clean_failed_videos()
-            reset = db.reset_stale_statuses()
-            return f"✅ Maintenance Complete!\n- Removed {deleted} failed videos.\n- Reset {reset} stuck/zombie tasks to PENDING."
-        except Exception as e:
-            return f"❌ Maintenance failed: {str(e)}"
-
     maintenance_btn.click(
         fn=run_ui_maintenance,
         outputs=maintenance_output

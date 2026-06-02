@@ -47,7 +47,7 @@ class FreeHostBaseUploader(BaseUploader):
         except ValueError:
             raise UploadError(f"Failed to parse JSON response from {self.provider_name}", details=response.text[:200])
 
-        if data.get("status") != 200 and data.get("msg") != "OK":
+        if data.get("status") != 200 or data.get("msg") != "OK":
             raise UploadError(
                 f"{self.provider_name} API returned error: {data.get('msg')}",
                 details=str(data)

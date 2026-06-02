@@ -46,7 +46,6 @@ def process_video(url):
                 logger.info(f"Skipping {url} (already COMPLETED on {current_provider})")
                 return
         else:
-            status = None
             db.insert_video(url)
         
         # 2. Check disk space before proceeding
@@ -74,9 +73,8 @@ def process_video(url):
             db.update_status(url, 'UPLOADING', local_filename=filename)
             uploader = get_uploader()
             
-            # Get selected provider name to store in DB dynamically
-            import config
-            upload_provider = config.UPLOAD_PROVIDER
+            # upload_provider from the already-imported config at top of function
+            upload_provider = current_provider
             
             # Create/upload video
             video_title = title or filename

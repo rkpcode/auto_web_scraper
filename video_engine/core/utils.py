@@ -34,8 +34,18 @@ def cleanup_file(filepath):
             logger.warning(f"Failed to delete {filepath}: {e}")
 
 
-def get_disk_free_space_gb(path="/"):
-    """Get free disk space in GB."""
+def get_disk_free_space_gb(path=None):
+    """
+    Get free disk space in GB.
+    Uses TEMP_STORAGE_DIR if available, otherwise falls back to cross-platform root.
+    """
+    if path is None:
+        try:
+            from config import TEMP_STORAGE_DIR
+            path = TEMP_STORAGE_DIR
+        except Exception:
+            # Cross-platform fallback: use current drive root on Windows, "/" on Linux
+            path = os.path.splitdrive(os.path.abspath(__file__))[0] + os.sep if os.name == 'nt' else "/"
     stat = shutil.disk_usage(path)
     return stat.free / (1024 ** 3)
 
