@@ -210,14 +210,14 @@ def run_ui_maintenance():
 def get_live_stats():
     """Get current database stats for dashboard."""
     try:
-        db_stats = db.get_stats()
+        import config
+        db_stats = db.get_stats(provider=config.UPLOAD_PROVIDER)
         total = db.get_total_count()
         provider_stats = db.get_provider_stats()
         
         current_state = state.get_state()
         
         # Build stats table
-        import config
         stats_md = f"**Active Upload Provider:** `{config.UPLOAD_PROVIDER.upper()}`\n\n"
         stats_md += "### 📊 Database Statistics\n\n"
         stats_md += "| Status | Count |\n|--------|-------|\n"

@@ -357,21 +357,49 @@ class SupabaseManager:
         
         return affected
     
-    def get_stats(self):
+    def get_stats(self, provider=None):
         """
         Get status distribution for monitoring dashboard.
+        If provider is specified, stats are tailored specifically to that provider.
         
         Returns:
             dict: Status counts (e.g., {'PENDING': 45, 'COMPLETED': 12})
         """
+        if not provider:
+            with self.get_cursor() as cursor:
+                cursor.execute("""
+                    SELECT status, COUNT(*) 
+                    FROM videos 
+                    GROUP BY status
+                """)
+                return dict(cursor.fetchall())
+        
+        provider = provider.strip().lower()
         with self.get_cursor() as cursor:
+            # Get other statuses (EXTRACTING, DOWNLOADING, UPLOADING, FAILED)
             cursor.execute("""
                 SELECT status, COUNT(*) 
                 FROM videos 
+                WHERE status IN ('EXTRACTING', 'DOWNLOADING', 'UPLOADING', 'FAILED')
                 GROUP BY status
             """)
             stats = dict(cursor.fetchall())
-        
+            
+            # Get completed count for this provider
+            cursor.execute("""
+                SELECT COUNT(*) FROM videos 
+                WHERE status = 'COMPLETED' AND upload_provider = %s
+            """, (provider,))
+            stats['COMPLETED'] = cursor.fetchone()[0]
+            
+            # Get pending count for this provider
+            cursor.execute("""
+                SELECT COUNT(*) FROM videos 
+                WHERE status = 'PENDING' 
+                   OR (status = 'COMPLETED' AND (upload_provider IS NULL OR upload_provider != %s))
+            """, (provider,))
+            stats['PENDING'] = cursor.fetchone()[0]
+            
         return stats
     
     def get_provider_stats(self):
