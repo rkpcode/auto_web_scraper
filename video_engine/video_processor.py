@@ -32,6 +32,7 @@ def process_video(url):
         url: Video page URL
     """
     filepath = None
+    current_provider = None
     
     try:
         # 1. Check if already processed
@@ -56,7 +57,7 @@ def process_video(url):
                 raise DiskSpaceError(f"Insufficient disk space (< {MIN_FREE_DISK_GB}GB)", url=url)
         
         # 3. Extract video URL and title
-        db.update_status(url, 'EXTRACTING')
+        db.update_status(url, 'EXTRACTING', upload_provider=current_provider)
         extractor = get_extractor(url)
         video_url, title = extractor.extract(url)
         
@@ -64,13 +65,13 @@ def process_video(url):
             raise ExtractionError("Failed to extract video URL", url=url)
         
         # 4. Download
-        db.update_status(url, 'DOWNLOADING')
+        db.update_status(url, 'DOWNLOADING', upload_provider=current_provider)
         downloader = VideoDownloader()
         filename, filepath = downloader.download(video_url, original_page_url=url)
         
         try:
             # 5. Upload to Selected Provider
-            db.update_status(url, 'UPLOADING', local_filename=filename)
+            db.update_status(url, 'UPLOADING', local_filename=filename, upload_provider=current_provider)
             uploader = get_uploader()
             
             # upload_provider from the already-imported config at top of function
@@ -97,14 +98,14 @@ def process_video(url):
     
     except PipelineException as e:
         # Already logged by exception __init__
-        db.log_error(url, str(e))
+        db.log_error(url, str(e), provider=current_provider)
         if filepath:
             cleanup_file(filepath)
     
     except Exception as e:
         logger.error(f"FAILED: {url}")
         logger.error(f"   Error: {str(e)}")
-        db.log_error(url, str(e))
+        db.log_error(url, str(e), provider=current_provider)
         
         # Cleanup on failure too
         if filepath:

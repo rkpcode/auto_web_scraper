@@ -391,22 +391,33 @@ class SupabaseManager:
             
             cursor.execute(query, params)
     
-    def log_error(self, url, error_msg):
+    def log_error(self, url, error_msg, provider=None):
         """
         Mark video as FAILED with error details.
         
         Args:
             url: Video page URL
             error_msg: Error message to store
+            provider: Active upload provider
         """
         with self.get_cursor() as cursor:
-            cursor.execute("""
-                UPDATE videos 
-                SET status = 'FAILED', 
-                    error_message = %s, 
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE original_url = %s
-            """, (error_msg, url))
+            if provider:
+                cursor.execute("""
+                    UPDATE videos 
+                    SET status = 'FAILED', 
+                        error_message = %s, 
+                        upload_provider = %s,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE original_url = %s
+                """, (error_msg, provider, url))
+            else:
+                cursor.execute("""
+                    UPDATE videos 
+                    SET status = 'FAILED', 
+                        error_message = %s, 
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE original_url = %s
+                """, (error_msg, url))
     
     def reset_stale_statuses(self):
         """
@@ -458,44 +469,41 @@ class SupabaseManager:
         }.get(provider)
         
         with self.get_cursor() as cursor:
-            # Get other statuses (EXTRACTING, DOWNLOADING, UPLOADING, FAILED)
-            cursor.execute("""
-                SELECT status, COUNT(*) 
-                FROM videos 
-                WHERE status IN ('EXTRACTING', 'DOWNLOADING', 'UPLOADING', 'FAILED')
-                GROUP BY status
-            """)
-            stats = dict(cursor.fetchall())
-            
             if prov_col:
-                # Completed means status is COMPLETED and the provider column is not null
-                cursor.execute(f"""
-                    SELECT COUNT(*) FROM videos 
-                    WHERE status = 'COMPLETED' AND {prov_col} IS NOT NULL
-                """)
-                stats['COMPLETED'] = cursor.fetchone()[0]
-                
-                # Pending means status is PENDING or (COMPLETED and provider column is null)
-                cursor.execute(f"""
-                    SELECT COUNT(*) FROM videos 
-                    WHERE status = 'PENDING' 
-                       OR (status = 'COMPLETED' AND {prov_col} IS NULL)
-                """)
-                stats['PENDING'] = cursor.fetchone()[0]
+                query = f"""
+                    SELECT 
+                        CASE 
+                            WHEN {prov_col} IS NOT NULL THEN 'COMPLETED'
+                            WHEN status = 'FAILED' AND upload_provider = %s THEN 'FAILED'
+                            WHEN status = 'EXTRACTING' AND upload_provider = %s THEN 'EXTRACTING'
+                            WHEN status = 'DOWNLOADING' AND upload_provider = %s THEN 'DOWNLOADING'
+                            WHEN status = 'UPLOADING' AND upload_provider = %s THEN 'UPLOADING'
+                            ELSE 'PENDING'
+                        END as status_bucket,
+                        COUNT(*)
+                    FROM videos
+                    GROUP BY status_bucket
+                """
+                cursor.execute(query, (provider, provider, provider, provider))
             else:
                 # Fallback if unknown provider
-                cursor.execute("""
-                    SELECT COUNT(*) FROM videos 
-                    WHERE status = 'COMPLETED' AND upload_provider = %s
-                """, (provider,))
-                stats['COMPLETED'] = cursor.fetchone()[0]
-                
-                cursor.execute("""
-                    SELECT COUNT(*) FROM videos 
-                    WHERE status = 'PENDING' 
-                       OR (status = 'COMPLETED' AND (upload_provider IS NULL OR upload_provider != %s))
-                """, (provider,))
-                stats['PENDING'] = cursor.fetchone()[0]
+                query = """
+                    SELECT 
+                        CASE 
+                            WHEN status = 'COMPLETED' AND upload_provider = %s THEN 'COMPLETED'
+                            WHEN status = 'FAILED' AND upload_provider = %s THEN 'FAILED'
+                            WHEN status = 'EXTRACTING' AND upload_provider = %s THEN 'EXTRACTING'
+                            WHEN status = 'DOWNLOADING' AND upload_provider = %s THEN 'DOWNLOADING'
+                            WHEN status = 'UPLOADING' AND upload_provider = %s THEN 'UPLOADING'
+                            ELSE 'PENDING'
+                        END as status_bucket,
+                        COUNT(*)
+                    FROM videos
+                    GROUP BY status_bucket
+                """
+                cursor.execute(query, (provider, provider, provider, provider, provider))
+            
+            stats = dict(cursor.fetchall())
             
         return stats
     

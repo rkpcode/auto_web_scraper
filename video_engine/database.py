@@ -214,31 +214,63 @@ class DatabaseManager:
             conn.commit()
             conn.close()
     
-    def log_error(self, url, error_msg):
+    def log_error(self, url, error_msg, provider=None):
         """Mark video as FAILED with error details."""
         with self.lock:
             conn = sqlite3.connect(self.db_path, timeout=60.0, isolation_level='DEFERRED')
             conn.execute('PRAGMA busy_timeout = 60000')  # 60 second busy timeout
             cursor = conn.cursor()
-            cursor.execute("""
-                UPDATE videos 
-                SET status = 'FAILED', error_message = ?, updated_at = ? 
-                WHERE original_url = ?
-            """, (error_msg, datetime.now(), url))
+            if provider:
+                cursor.execute("""
+                    UPDATE videos 
+                    SET status = 'FAILED', error_message = ?, upload_provider = ?, updated_at = ? 
+                    WHERE original_url = ?
+                """, (error_msg, provider, datetime.now(), url))
+            else:
+                cursor.execute("""
+                    UPDATE videos 
+                    SET status = 'FAILED', error_message = ?, updated_at = ? 
+                    WHERE original_url = ?
+                """, (error_msg, datetime.now(), url))
             conn.commit()
             conn.close()
     
-    def get_stats(self):
+    def get_stats(self, provider=None):
         """Get status distribution for monitoring."""
+        if not provider:
+            with self.lock:
+                conn = sqlite3.connect(self.db_path, timeout=60.0, isolation_level='DEFERRED')
+                conn.execute('PRAGMA busy_timeout = 60000')  # 60 second busy timeout
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT status, COUNT(*) 
+                    FROM videos 
+                    GROUP BY status
+                """)
+                stats = dict(cursor.fetchall())
+                conn.close()
+                return stats
+
+        provider = provider.strip().lower()
         with self.lock:
             conn = sqlite3.connect(self.db_path, timeout=60.0, isolation_level='DEFERRED')
             conn.execute('PRAGMA busy_timeout = 60000')  # 60 second busy timeout
             cursor = conn.cursor()
-            cursor.execute("""
-                SELECT status, COUNT(*) 
-                FROM videos 
-                GROUP BY status
-            """)
+            query = """
+                SELECT 
+                    CASE 
+                        WHEN status = 'COMPLETED' AND upload_provider = ? THEN 'COMPLETED'
+                        WHEN status = 'FAILED' AND upload_provider = ? THEN 'FAILED'
+                        WHEN status = 'EXTRACTING' AND upload_provider = ? THEN 'EXTRACTING'
+                        WHEN status = 'DOWNLOADING' AND upload_provider = ? THEN 'DOWNLOADING'
+                        WHEN status = 'UPLOADING' AND upload_provider = ? THEN 'UPLOADING'
+                        ELSE 'PENDING'
+                    END as status_bucket,
+                    COUNT(*)
+                FROM videos
+                GROUP BY status_bucket
+            """
+            cursor.execute(query, (provider, provider, provider, provider, provider))
             stats = dict(cursor.fetchall())
             conn.close()
             return stats
