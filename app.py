@@ -295,7 +295,7 @@ def get_live_stats():
 # ============================================================================
 # GRADIO INTERFACE
 # ============================================================================
-with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
+with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft(), ssr_mode=False) as app:
     gr.Markdown("""
     # 🎬 Video Scraper Pipeline (Two-Phase Model)
     
@@ -452,6 +452,6 @@ if __name__ == "__main__":
     # Add authentication if APP_PASSWORD is set
     app_password = os.getenv("APP_PASSWORD")
     if app_password:
-        app.launch(auth=("admin", app_password), server_name="0.0.0.0", ssr=False)
+        app.launch(auth=("admin", app_password), server_name="0.0.0.0")
     else:
-        app.launch(server_name="0.0.0.0", ssr=False)
+        app.launch(server_name="0.0.0.0")
