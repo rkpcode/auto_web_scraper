@@ -24,6 +24,9 @@ if os.getenv("SPACE_ID") and not os.path.exists("/home/user/.cache/ms-playwright
     print("🔧 Installing Playwright Chromium...")
     subprocess.run(["playwright", "install", "chromium"], check=True)
 
+# FIX for Gradio Auth on HF Spaces: Prevent requests from routing localhost through HF proxies
+os.environ["NO_PROXY"] = "localhost,127.0.0.1,0.0.0.0"
+
 from database_supabase import db
 from harvester import harvest_and_save
 from pipeline_runner import process_video
