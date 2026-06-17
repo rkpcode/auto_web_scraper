@@ -49,15 +49,27 @@ def process_video(url):
         current_provider = config.UPLOAD_PROVIDER
         
         # Get all upload details to support simultaneous multi-provider uploads
-        upload_details = db.get_all_upload_ids(url)
+        upload_details = db.get_all_upload_ids(url) or {}
+        providers_to_upload = ['doodstream', 'seekstreaming', 'lulustream']
+        
+        # Check how many providers are already uploaded
+        completed_providers = 0
+        for provider in providers_to_upload:
+            prov_col = f"{provider}_id"
+            if upload_details.get(prov_col):
+                completed_providers += 1
+                
+        # If all platforms have an ID, mark COMPLETED and skip
+        if completed_providers == len(providers_to_upload):
+            logger.info(f"Skipping {url} (already fully COMPLETED across all {len(providers_to_upload)} platforms)")
+            db.update_status(url, 'COMPLETED')
+            return
+            
+        logger.info(f"Processing {url} ({completed_providers}/{len(providers_to_upload)} platforms complete)")
+        
         unique_id = str(uuid.uuid4())
         
-        if upload_details:
-            # Check if this URL already has a unique_id (we need to query it if it's not in get_all_upload_ids)
-            # Actually, we can fetch it or just rely on the existing ID. Let's assume the DB will keep the existing one if we don't overwrite it,
-            # but we need to assign it during EXTRACTING.
-            pass
-        else:
+        if not upload_details:
             db.insert_video(url)
         
         # 2. Check disk space before proceeding
@@ -89,20 +101,15 @@ def process_video(url):
         
         try:
             # 5. Upload to all configured providers sequentially
-            providers_to_upload = ['doodstream', 'seekstreaming', 'lulustream']
+            success_count = 0
             
             for provider in providers_to_upload:
                 # Check if already uploaded to this provider
-                upload_details = db.get_all_upload_ids(url)
-                prov_col = {
-                    'doodstream': 'doodstream_id',
-                    'seekstreaming': 'seekstreaming_id',
-                    'lulustream': 'lulustream_id',
-                    'bunny': 'bunny_guid'
-                }.get(provider)
+                prov_col = f"{provider}_id"
                 
-                if upload_details and upload_details.get('status') == 'COMPLETED' and upload_details.get(prov_col):
+                if upload_details.get(prov_col):
                     logger.info(f"Skipping {url} for {provider} (already COMPLETED with ID: {upload_details[prov_col]})")
+                    success_count += 1
                     continue
                     
                 logger.info(f"Uploading {url} to {provider}...")
@@ -114,18 +121,26 @@ def process_video(url):
                     upload_id = uploader.upload(video_title, filepath)
                     
                     db_kwargs = {
-                        'upload_id': upload_id,
-                        'upload_provider': provider
+                        'upload_provider': provider,
+                        prov_col: upload_id
                     }
-                    if prov_col:
-                        db_kwargs[prov_col] = upload_id
-                        
-                    db.update_status(url, 'COMPLETED', **db_kwargs)
+                    
+                    # NOTE: Update with 'PROCESSING' to save ID but prevent worker conflict
+                    db.update_status(url, 'PROCESSING', **db_kwargs)
                     logger.info(f"SUCCESS: {url} -> {provider.upper()} ID: {upload_id}")
+                    success_count += 1
                 except Exception as upload_err:
                     logger.error(f"FAILED to upload to {provider}: {str(upload_err)}")
                     db.log_error(url, f"Upload to {provider} failed: {str(upload_err)}", provider=provider)
                     # We continue to the next provider instead of failing the whole process
+            
+            # 6. Final Status Evaluation
+            if success_count == len(providers_to_upload):
+                db.update_status(url, 'COMPLETED')
+                logger.info(f"✅ FULLY COMPLETED: {url} across all platforms")
+            else:
+                db.update_status(url, 'PENDING')
+                logger.warning(f"⚠️ PARTIAL SUCCESS: {url} ({success_count}/{len(providers_to_upload)}). Returning to PENDING.")
         
         finally:
             # GUARANTEED cleanup (even if upload fails)
