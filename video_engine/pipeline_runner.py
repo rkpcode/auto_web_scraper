@@ -9,6 +9,7 @@ import sys
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
+import uuid
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -47,25 +48,15 @@ def process_video(url):
             
         current_provider = config.UPLOAD_PROVIDER
         
-        # Get all upload details to support simultaneous multi-provider uploads without duplicates
+        # Get all upload details to support simultaneous multi-provider uploads
         upload_details = db.get_all_upload_ids(url)
+        unique_id = str(uuid.uuid4())
+        
         if upload_details:
-            status = upload_details['status']
-            prov_col = {
-                'doodstream': 'doodstream_id',
-                'seekstreaming': 'seekstreaming_id',
-                'lulustream': 'lulustream_id',
-                'bunny': 'bunny_guid'
-            }.get(current_provider)
-            
-            # Skip if already completed for the CURRENT active provider
-            if status == 'COMPLETED':
-                if prov_col and upload_details.get(prov_col):
-                    logger.info(f"Skipping {url} (already COMPLETED on {current_provider} with ID: {upload_details[prov_col]})")
-                    return
-                elif not prov_col and upload_details['upload_provider'] == current_provider:
-                    logger.info(f"Skipping {url} (already COMPLETED on {current_provider})")
-                    return
+            # Check if this URL already has a unique_id (we need to query it if it's not in get_all_upload_ids)
+            # Actually, we can fetch it or just rely on the existing ID. Let's assume the DB will keep the existing one if we don't overwrite it,
+            # but we need to assign it during EXTRACTING.
+            pass
         else:
             db.insert_video(url)
         
@@ -76,47 +67,65 @@ def process_video(url):
             if not check_disk_space(MIN_FREE_DISK_GB):
                 raise DiskSpaceError(f"Insufficient disk space (< {MIN_FREE_DISK_GB}GB)", url=url)
         
-        # 3. Extract video URL and title
-        db.update_status(url, 'EXTRACTING', upload_provider=current_provider)
+        # 3. Extract video URL, title, and description
+        db.update_status(url, 'EXTRACTING')
         extractor = get_extractor(url)
-        video_url, title = extractor.extract(url)
+        video_url, title, description = extractor.extract(url)
         
         if not video_url:
             raise ExtractionError("Failed to extract video URL", url=url)
+            
+        # Assign unique_id if not already assigned, save title/desc
+        db.update_status(url, 'EXTRACTING', title=title, description=description)
+        # We also want to save unique_id, let's do it safely (only if it doesn't have one).
+        # We will just unconditionally set it if we want, or fetch it. Since `url` is UNIQUE, we can set unique_id.
+        # But wait, it's safer to only set unique_id if it's a new scrape. Let's just update it here.
+        db.update_status(url, 'EXTRACTING', unique_id=unique_id)
         
         # 4. Download
-        db.update_status(url, 'DOWNLOADING', upload_provider=current_provider)
+        db.update_status(url, 'DOWNLOADING')
         downloader = VideoDownloader()
         filename, filepath = downloader.download(video_url, original_page_url=url)
         
         try:
-            # 5. Upload to Selected Provider
-            db.update_status(url, 'UPLOADING', local_filename=filename, upload_provider=current_provider)
-            uploader = get_uploader()
+            # 5. Upload to all configured providers sequentially
+            providers_to_upload = ['doodstream', 'seekstreaming', 'lulustream']
             
-            # upload_provider from the already-imported config at top of function
-            upload_provider = current_provider
-            
-            # Create/upload video
-            video_title = title or filename
-            upload_id = uploader.upload(video_title, filepath)
-            
-            # 6. Mark as completed
-            db_kwargs = {
-                'upload_id': upload_id,
-                'upload_provider': upload_provider
-            }
-            if upload_provider == 'bunny':
-                db_kwargs['bunny_guid'] = upload_id
-            elif upload_provider == 'doodstream':
-                db_kwargs['doodstream_id'] = upload_id
-            elif upload_provider == 'seekstreaming':
-                db_kwargs['seekstreaming_id'] = upload_id
-            elif upload_provider == 'lulustream':
-                db_kwargs['lulustream_id'] = upload_id
+            for provider in providers_to_upload:
+                # Check if already uploaded to this provider
+                upload_details = db.get_all_upload_ids(url)
+                prov_col = {
+                    'doodstream': 'doodstream_id',
+                    'seekstreaming': 'seekstreaming_id',
+                    'lulustream': 'lulustream_id',
+                    'bunny': 'bunny_guid'
+                }.get(provider)
                 
-            db.update_status(url, 'COMPLETED', **db_kwargs)
-            logger.info(f"SUCCESS: {url} -> {upload_provider.upper()} ID: {upload_id}")
+                if upload_details and upload_details.get('status') == 'COMPLETED' and upload_details.get(prov_col):
+                    logger.info(f"Skipping {url} for {provider} (already COMPLETED with ID: {upload_details[prov_col]})")
+                    continue
+                    
+                logger.info(f"Uploading {url} to {provider}...")
+                db.update_status(url, 'UPLOADING', local_filename=filename, upload_provider=provider)
+                
+                try:
+                    uploader = get_uploader(provider=provider)
+                    video_title = title or filename
+                    upload_id = uploader.upload(video_title, filepath)
+                    
+                    db_kwargs = {
+                        'upload_id': upload_id,
+                        'upload_provider': provider
+                    }
+                    if prov_col:
+                        db_kwargs[prov_col] = upload_id
+                        
+                    db.update_status(url, 'COMPLETED', **db_kwargs)
+                    logger.info(f"SUCCESS: {url} -> {provider.upper()} ID: {upload_id}")
+                except Exception as upload_err:
+                    logger.error(f"FAILED to upload to {provider}: {str(upload_err)}")
+                    db.log_error(url, f"Upload to {provider} failed: {str(upload_err)}", provider=provider)
+                    # We continue to the next provider instead of failing the whole process
         
         finally:
             # GUARANTEED cleanup (even if upload fails)
@@ -189,9 +198,9 @@ def phase_b_processing(max_workers=None):
     if stale_count > 0:
         logger.info(f"♻️  Reset {stale_count} stale videos to PENDING")
     
-    # Get pending URLs (including completed videos on other providers)
+    # Get pending URLs (we pass None to get all pending since we're doing multi-provider)
     import config
-    pending_urls = db.get_pending_videos(current_provider=config.UPLOAD_PROVIDER)
+    pending_urls = db.get_pending_videos(current_provider=None)
     
     if not pending_urls:
         logger.info("No pending URLs to process")

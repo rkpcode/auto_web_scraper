@@ -99,7 +99,10 @@ class SupabaseManager:
                 ADD COLUMN IF NOT EXISTS upload_id TEXT,
                 ADD COLUMN IF NOT EXISTS doodstream_id TEXT,
                 ADD COLUMN IF NOT EXISTS seekstreaming_id TEXT,
-                ADD COLUMN IF NOT EXISTS lulustream_id TEXT
+                ADD COLUMN IF NOT EXISTS lulustream_id TEXT,
+                ADD COLUMN IF NOT EXISTS title TEXT,
+                ADD COLUMN IF NOT EXISTS description TEXT,
+                ADD COLUMN IF NOT EXISTS unique_id TEXT
             """)
             
             # Create indexes for faster queries
@@ -358,7 +361,8 @@ class SupabaseManager:
     ALLOWED_UPDATE_COLUMNS = {
         'bunny_guid', 'upload_provider', 'upload_id', 
         'local_filename', 'error_message',
-        'doodstream_id', 'seekstreaming_id', 'lulustream_id'
+        'doodstream_id', 'seekstreaming_id', 'lulustream_id',
+        'title', 'description', 'unique_id'
     }
     
     def update_status(self, url, status, **kwargs):

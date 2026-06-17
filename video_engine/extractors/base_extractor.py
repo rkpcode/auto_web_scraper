@@ -16,9 +16,10 @@ class BaseExtractor(ABC):
             url: Page URL containing the video
             
         Returns:
-            tuple: (direct_video_url, title)
+            tuple: (direct_video_url, title, description)
                    - direct_video_url: Direct link to MP4/M3U8
                    - title: Video title (can be None)
+                   - description: Video description (can be None)
         """
         pass
     

@@ -90,7 +90,7 @@ class BrowserExtractor(BaseExtractor):
             url: Page URL containing the video
             
         Returns:
-            tuple: (direct_video_url, title)
+            tuple: (direct_video_url, title, description)
         """
         # FAST FAIL: Check URL patterns before launching browser
         # This saves significant resources by avoiding browser launch for junk URLs
@@ -104,6 +104,7 @@ class BrowserExtractor(BaseExtractor):
 
         video_url = None
         title = "Untitled Video"
+        description = "No description available"
         
         try:
             logger.info(f"[BROWSER] Launching headless browser for {url}")
@@ -173,8 +174,13 @@ class BrowserExtractor(BaseExtractor):
                     # Capture Title Immediately (Safe Fallback)
                     try:
                         title = page.title()
+                        description = page.evaluate("""() => {
+                            const meta = document.querySelector('meta[name="description"]') || document.querySelector('meta[property="og:description"]');
+                            return meta ? meta.content : 'No description available';
+                        }""")
                     except Exception:
                         title = "Untitled Video"
+                        description = "No description available"
 
                     # Smart Interaction Loop (Early Exit + Overlay Killer)
                     import time
@@ -238,7 +244,7 @@ class BrowserExtractor(BaseExtractor):
                     except Exception as e:
                         logger.warning(f"Error closing browser: {e}")
 
-            return video_url, title
+            return video_url, title, description
 
         except ExtractionError:
             raise

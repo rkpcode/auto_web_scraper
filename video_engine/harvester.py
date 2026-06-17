@@ -211,10 +211,10 @@ class LinkHarvester(BaseHarvester):
         import random
         
         logger.info(f"[HARVESTER] Starting pagination discovery from {self.base_url}")
-        logger.info(f"[HARVESTER] Start page: {start_page}, Max pages: {max_pages}")
+        logger.info(f"[HARVESTER] Start page: {start_page}, Max pages: {max_pages if max_pages > 0 else 'Unlimited'}")
         
         page_num = start_page
-        end_page = start_page + max_pages
+        end_page = start_page + max_pages if max_pages > 0 else float('inf')
         consecutive_zero_pages = 0
         
         while page_num < end_page:
@@ -226,7 +226,7 @@ class LinkHarvester(BaseHarvester):
                 current_page_url = f"{self.base_url.rstrip('/')}/page/{page_num}/"
             
             try:
-                logger.info(f"[HARVESTER] Crawling page {page_num} of {end_page-1}: {current_page_url}")
+                logger.info(f"[HARVESTER] Crawling page {page_num} of {end_page-1 if end_page != float('inf') else 'Unlimited'}: {current_page_url}")
                 
                 # CRITICAL: Rotate User-Agent on every page to prevent fingerprinting
                 from core.utils import get_random_user_agent
@@ -376,7 +376,7 @@ class ViralkandHarvester(BaseHarvester):
         
         pages_crawled = 0
         
-        while queue and pages_crawled < max_pages:
+        while queue and (pages_crawled < max_pages if max_pages > 0 else True):
             current_url = queue.popleft()
             
             if current_url in visited:
@@ -388,7 +388,7 @@ class ViralkandHarvester(BaseHarvester):
                 logger.info(f"[HARVESTER] ⏳ Waiting {delay:.1f}s...")
                 time.sleep(delay)
                 
-                logger.info(f"[HARVESTER] 🕸️ Crawling {pages_crawled + 1}/{max_pages}: {current_url}")
+                logger.info(f"[HARVESTER] 🕸️ Crawling {pages_crawled + 1}/{max_pages if max_pages > 0 else 'Unlimited'}: {current_url}")
                 
                 # Fetch page
                 from core.utils import get_random_user_agent

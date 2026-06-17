@@ -31,7 +31,7 @@ class ViralkandExtractor(BaseExtractor):
             url: Page URL containing the video
             
         Returns:
-            tuple: (direct_video_url, title)
+            tuple: (direct_video_url, title, description)
         """
         try:
             logger.info(f"🔍 Extracting from {self._get_domain(url)}")
@@ -69,6 +69,14 @@ class ViralkandExtractor(BaseExtractor):
             # Extract title
             title = soup.find('title')
             title = title.text.strip() if title else 'Untitled'
+            
+            # Extract description
+            description = None
+            meta_desc = soup.find('meta', attrs={'name': 'description'}) or soup.find('meta', attrs={'property': 'og:description'})
+            if meta_desc:
+                description = meta_desc.get('content', '').strip()
+            if not description:
+                description = 'No description available'
             
             # Find iframe with q parameter (relaxed check)
             target_iframe = None
@@ -137,7 +145,7 @@ class ViralkandExtractor(BaseExtractor):
                 )
             
             logger.info(f"✅ Extracted direct video URL: {video_url[:60]}...")
-            return video_url, title
+            return video_url, title, description
         
         except ExtractionError:
             raise

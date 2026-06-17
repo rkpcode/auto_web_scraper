@@ -17,7 +17,7 @@ class GenericExtractor(BaseExtractor):
             url: Video page URL
             
         Returns:
-            tuple: (video_url, title)
+            tuple: (video_url, title, description)
                    For yt-dlp supported sites, this returns the original URL
                    since yt-dlp will handle download directly.
         """
@@ -31,13 +31,14 @@ class GenericExtractor(BaseExtractor):
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
                 title = info.get('title', 'Untitled')
+                description = info.get('description', 'No description available')
                 
                 # For yt-dlp supported sites, just return the original URL
                 # The downloader will handle it
                 logger.info(f"📹 Extracted: {title}")
-                return url, title
+                return url, title, description
         
         except Exception as e:
             logger.warning(f"Generic extraction failed: {e}")
             # Fallback: return URL as-is and hope downloader can handle it
-            return url, None
+            return url, None, None

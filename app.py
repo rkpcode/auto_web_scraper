@@ -298,7 +298,7 @@ with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
     # 🎬 Video Scraper Pipeline (Two-Phase Model)
     
     **Phase A:** Discovery - Harvester scans pages and seeds database  
-    **Phase B:** Processing - Workers download and upload videos to **{provider}**  
+    **Phase B:** Processing - Workers download and sequentially upload videos to **Doodstream, Seekstreaming, and Lulustream**  
     
     **Database:** Supabase (PostgreSQL) - State persists across restarts  
     **Workers:** {workers} (Optimized for HF Spaces 16GB RAM)
@@ -315,12 +315,12 @@ with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
             )
             
             max_pages_slider = gr.Slider(
-                minimum=1,
+                minimum=0,
                 maximum=20,
-                value=DEFAULT_MAX_PAGES,
+                value=0,
                 step=1,
-                label="Max Pages to Crawl",
-                info="Hard limit to prevent infinite loops"
+                label="Max Pages to Crawl (0 = Unlimited)",
+                info="Set to 0 to scrape till the last page (auto-stops when no new links found)"
             )
             
             start_page_slider = gr.Slider(
@@ -338,12 +338,7 @@ with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
             gr.Markdown("---")
             gr.Markdown("## 🚀 Phase B: Processing")
             
-            provider_dropdown = gr.Dropdown(
-                choices=["doodstream", "seekstreaming", "lulustream", "bunny"],
-                value=UPLOAD_PROVIDER,
-                label="Select Active Upload Provider",
-                info="Switch hosts dynamically before processing!"
-            )
+            gr.Markdown("ℹ️ **Multi-Upload Mode:** Videos will be sequentially uploaded to Doodstream, Seekstreaming, and Lulustream and linked with a unique ID.")
             
             with gr.Row():
                 processing_btn = gr.Button("🚀 Start Processing", variant="primary", size="lg")
@@ -366,12 +361,6 @@ with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
         fn=start_discovery,
         inputs=[website_input, max_pages_slider, start_page_slider],
         outputs=discovery_output
-    )
-    
-    provider_dropdown.change(
-        fn=change_upload_provider,
-        inputs=provider_dropdown,
-        outputs=processing_output
     )
     
     processing_btn.click(
