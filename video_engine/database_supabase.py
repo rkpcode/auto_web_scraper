@@ -517,20 +517,21 @@ class SupabaseManager:
         
         Returns:
             dict: Provider counts (e.g., {'doodstream': 25, 'lulustream': 10})
-                  Only includes COMPLETED videos with a known provider.
         """
         with self.get_cursor() as cursor:
             cursor.execute("""
                 SELECT 
-                    COALESCE(upload_provider, 'unknown') as provider,
-                    COUNT(*) as count
+                    COUNT(doodstream_id) as doodstream,
+                    COUNT(seekstreaming_id) as seekstreaming,
+                    COUNT(lulustream_id) as lulustream
                 FROM videos 
-                WHERE status = 'COMPLETED' 
-                    AND upload_provider IS NOT NULL
-                GROUP BY upload_provider
-                ORDER BY count DESC
             """)
-            provider_stats = dict(cursor.fetchall())
+            row = cursor.fetchone()
+            provider_stats = {
+                'doodstream': row[0] or 0,
+                'seekstreaming': row[1] or 0,
+                'lulustream': row[2] or 0
+            }
         
         return provider_stats
     

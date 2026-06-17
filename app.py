@@ -231,15 +231,14 @@ def run_ui_maintenance():
 def get_live_stats():
     """Get current database stats for dashboard."""
     try:
-        import config
-        db_stats = db.get_stats(provider=config.UPLOAD_PROVIDER)
+        db_stats = db.get_stats(provider=None)
         total = db.get_total_count()
         provider_stats = db.get_provider_stats()
         
         current_state = state.get_state()
         
         # Build stats table
-        stats_md = f"**Active Upload Provider:** `{config.UPLOAD_PROVIDER.upper()}`\n\n"
+        stats_md = "### 📊 Global Database Statistics\n\n"
         stats_md += "### 📊 Database Statistics\n\n"
         stats_md += "| Status | Count |\n|--------|-------|\n"
         
@@ -447,4 +446,9 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"❌ Database error: {e}")
     
-    app.launch()
+    # Add authentication if APP_PASSWORD is set
+    app_password = os.getenv("APP_PASSWORD")
+    if app_password:
+        app.launch(auth=("admin", app_password))
+    else:
+        app.launch()
