@@ -295,16 +295,26 @@ def get_live_stats():
 # ============================================================================
 # GRADIO INTERFACE
 # ============================================================================
-with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft(), ssr_mode=False) as app:
-    gr.Markdown("""
-    # 🎬 Video Scraper Pipeline (Two-Phase Model)
+with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
+    app_password = os.getenv("APP_PASSWORD")
     
-    **Phase A:** Discovery - Harvester scans pages and seeds database  
-    **Phase B:** Processing - Workers download and sequentially upload videos to **Doodstream, Seekstreaming, and Lulustream**  
-    
-    **Database:** Supabase (PostgreSQL) - State persists across restarts  
-    **Workers:** {workers} (Optimized for HF Spaces 16GB RAM)
-    """.format(workers=MAX_WORKERS, provider=UPLOAD_PROVIDER.upper()))
+    with gr.Group(visible=bool(app_password)) as login_group:
+        gr.Markdown("# 🔒 Login Required")
+        gr.Markdown("Please enter the password to access the Video Scraper Pipeline.")
+        pwd_input = gr.Textbox(type="password", label="Password")
+        login_btn = gr.Button("Login", variant="primary")
+        login_error = gr.Markdown("", visible=False)
+        
+    with gr.Group(visible=not bool(app_password)) as main_app_group:
+        gr.Markdown("""
+        # 🎬 Video Scraper Pipeline (Two-Phase Model)
+        
+        **Phase A:** Discovery - Harvester scans pages and seeds database  
+        **Phase B:** Processing - Workers download and sequentially upload videos to **Doodstream, Seekstreaming, and Lulustream**  
+        
+        **Database:** Supabase (PostgreSQL) - State persists across restarts  
+        **Workers:** {workers} (Optimized for HF Spaces 16GB RAM)
+        """.format(workers=MAX_WORKERS, provider=UPLOAD_PROVIDER.upper()))
     
     with gr.Row():
         with gr.Column(scale=1):
@@ -440,6 +450,19 @@ with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft(), ssr_mode=
         """)
 
 
+    # Login logic
+    def verify_login(pwd):
+        if pwd == app_password:
+            return gr.update(visible=False), gr.update(visible=True), gr.update(visible=False)
+        else:
+            return gr.update(), gr.update(), gr.update(value="❌ **Incorrect password**", visible=True)
+            
+    login_btn.click(
+        verify_login,
+        inputs=[pwd_input],
+        outputs=[login_group, main_app_group, login_error]
+    )
+
 if __name__ == "__main__":
     # Initialize database on startup
     print("🔧 Initializing Supabase connection...")
@@ -449,9 +472,4 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"❌ Database error: {e}")
     
-    # Add authentication if APP_PASSWORD is set
-    app_password = os.getenv("APP_PASSWORD")
-    if app_password:
-        app.launch(auth=("admin", app_password), server_name="0.0.0.0")
-    else:
-        app.launch(server_name="0.0.0.0")
+    app.launch(server_name="0.0.0.0")
