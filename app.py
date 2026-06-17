@@ -449,6 +449,6 @@ if __name__ == "__main__":
     # Add authentication if APP_PASSWORD is set
     app_password = os.getenv("APP_PASSWORD")
     if app_password:
-        app.launch(auth=("admin", app_password))
+        app.launch(auth=("admin", app_password), server_name="0.0.0.0")
     else:
-        app.launch()
+        app.launch(server_name="0.0.0.0")
