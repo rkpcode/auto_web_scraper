@@ -316,139 +316,139 @@ with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
         **Workers:** {workers} (Optimized for HF Spaces 16GB RAM)
         """.format(workers=MAX_WORKERS, provider=UPLOAD_PROVIDER.upper()))
     
-    with gr.Row():
-        with gr.Column(scale=1):
-            gr.Markdown("## 🔍 Phase A: Discovery")
+        with gr.Row():
+            with gr.Column(scale=1):
+                gr.Markdown("## 🔍 Phase A: Discovery")
+                
+                website_input = gr.Textbox(
+                    label="Website URL",
+                    placeholder="https://example.com",
+                    info="Enter the website to scrape videos from"
+                )
+                
+                max_pages_slider = gr.Slider(
+                    minimum=0,
+                    maximum=20,
+                    value=0,
+                    step=1,
+                    label="Max Pages to Crawl (0 = Unlimited)",
+                    info="Set to 0 to scrape till the last page (auto-stops when no new links found)"
+                )
+                
+                start_page_slider = gr.Slider(
+                    minimum=1,
+                    maximum=100,
+                    value=1,
+                    step=1,
+                    label="Start Page Number",
+                    info="Useful for resuming or skipping initial pages"
+                )
+                
+                discovery_btn = gr.Button("🔍 Start Discovery", variant="primary", size="lg")
+                discovery_output = gr.Textbox(label="Discovery Status", lines=3, interactive=False)
+                
+                gr.Markdown("---")
+                gr.Markdown("## 🚀 Phase B: Processing")
+                
+                gr.Markdown("ℹ️ **Multi-Upload Mode:** Videos will be sequentially uploaded to Doodstream, Seekstreaming, and Lulustream and linked with a unique ID.")
+                
+                with gr.Row():
+                    processing_btn = gr.Button("🚀 Start Processing", variant="primary", size="lg")
+                    stop_btn = gr.Button("🛑 Stop Processing", variant="stop", size="lg")
+                processing_output = gr.Textbox(label="Processing Status", lines=3, interactive=False)
+                
+                gr.Markdown("---")
+                gr.Markdown("## 🛠️ Database Maintenance")
+                maintenance_btn = gr.Button("🧹 Clean Failed Videos & Reset Stuck Tasks", variant="stop", size="lg")
+                maintenance_output = gr.Textbox(label="Maintenance Status", lines=2, interactive=False)
             
-            website_input = gr.Textbox(
-                label="Website URL",
-                placeholder="https://example.com",
-                info="Enter the website to scrape videos from"
-            )
-            
-            max_pages_slider = gr.Slider(
-                minimum=0,
-                maximum=20,
-                value=0,
-                step=1,
-                label="Max Pages to Crawl (0 = Unlimited)",
-                info="Set to 0 to scrape till the last page (auto-stops when no new links found)"
-            )
-            
-            start_page_slider = gr.Slider(
-                minimum=1,
-                maximum=100,
-                value=1,
-                step=1,
-                label="Start Page Number",
-                info="Useful for resuming or skipping initial pages"
-            )
-            
-            discovery_btn = gr.Button("🔍 Start Discovery", variant="primary", size="lg")
-            discovery_output = gr.Textbox(label="Discovery Status", lines=3, interactive=False)
-            
-            gr.Markdown("---")
-            gr.Markdown("## 🚀 Phase B: Processing")
-            
-            gr.Markdown("ℹ️ **Multi-Upload Mode:** Videos will be sequentially uploaded to Doodstream, Seekstreaming, and Lulustream and linked with a unique ID.")
-            
-            with gr.Row():
-                processing_btn = gr.Button("🚀 Start Processing", variant="primary", size="lg")
-                stop_btn = gr.Button("🛑 Stop Processing", variant="stop", size="lg")
-            processing_output = gr.Textbox(label="Processing Status", lines=3, interactive=False)
-            
-            gr.Markdown("---")
-            gr.Markdown("## 🛠️ Database Maintenance")
-            maintenance_btn = gr.Button("🧹 Clean Failed Videos & Reset Stuck Tasks", variant="stop", size="lg")
-            maintenance_output = gr.Textbox(label="Maintenance Status", lines=2, interactive=False)
+            with gr.Column(scale=1):
+                gr.Markdown("## 📊 Live Dashboard")
+                stats_display = gr.Markdown(value=get_live_stats())
+                
+                refresh_btn = gr.Button("🔄 Refresh Stats")
         
-        with gr.Column(scale=1):
-            gr.Markdown("## 📊 Live Dashboard")
-            stats_display = gr.Markdown(value=get_live_stats())
+        # Event handlers
+        discovery_btn.click(
+            fn=start_discovery,
+            inputs=[website_input, max_pages_slider, start_page_slider],
+            outputs=discovery_output
+        )
+        
+        processing_btn.click(
+            fn=start_processing,
+            outputs=processing_output
+        )
+        
+        stop_btn.click(
+            fn=stop_processing,
+            outputs=processing_output
+        )
+        
+        maintenance_btn.click(
+            fn=run_ui_maintenance,
+            outputs=maintenance_output
+        )
+        
+        refresh_btn.click(
+            fn=get_live_stats,
+            outputs=stats_display
+        )
+        
+        # Auto-refresh stats every 5 seconds
+        timer = gr.Timer(5)
+        timer.tick(get_live_stats, outputs=stats_display)
+        
+        with gr.Tab("Documentation"):
+            gr.Markdown("""
+            ## 📖 Setup Instructions
             
-            refresh_btn = gr.Button("🔄 Refresh Stats")
+            ### 1. Environment Variables (HF Spaces Secrets)
+            
+            - `DATABASE_URL`: Supabase connection string (PostgreSQL)
+            - `UPLOAD_PROVIDER`: Selected video upload provider (`doodstream` (default), `seekstreaming`, `lulustream`, or `bunny`)
+            - `DOODSTREAM_API_KEY`: DoodStream API key (and optional `DOODSTREAM_BASE_URL`)
+            - `SEEKSTREAMING_API_KEY`: SeekStreaming API key (and optional `SEEKSTREAMING_BASE_URL`)
+            - `LULUSTREAM_API_KEY`: LuluStream API key (and optional `LULUSTREAM_BASE_URL`)
+            - `BUNNY_API_KEY`: Bunny Stream API key (optional)
+            - `BUNNY_LIBRARY_ID`: Bunny Stream library ID (optional)
+            
+            ### 2. How It Works
+            
+            **Phase A (Discovery):**
+            1. Enter website URL
+            2. Harvester crawls pages using pagination (?page=n)
+            3. Auto-stops when no new links found
+            4. Seeds URLs to Supabase database
+            
+            **Phase B (Processing):**
+            1. Fetches PENDING videos from database
+            2. Downloads using yt-dlp
+            3. Uploads to the selected active provider
+            4. Updates status to COMPLETED
+            
+            ### 3. Memory Management
+            
+            **HF Spaces Free Tier: 16GB RAM**
+            
+            - Gradio App: ~1GB
+            - Harvester (Playwright): ~800MB
+            - Workers (2): ~1GB
+            - **Total:** ~2.8GB (Safe)
+            
+            ⚠️ **CRITICAL:** Discovery and Processing run separately to avoid OOM crashes.
+            
+            ### 4. Troubleshooting
+            
+            - **"Too many clients"**: Supabase connection leak. Restart the Space.
+            - **Exit Code 137**: Out of Memory. Reduce MAX_WORKERS or run phases separately.
+            - **No links found**: Check if website has videos or try different URL.
+            
+            ### 5. Database Persistence
+            
+            Supabase ensures your progress is saved even if HF Space restarts. You can resume processing anytime.
+            """)
     
-    # Event handlers
-    discovery_btn.click(
-        fn=start_discovery,
-        inputs=[website_input, max_pages_slider, start_page_slider],
-        outputs=discovery_output
-    )
-    
-    processing_btn.click(
-        fn=start_processing,
-        outputs=processing_output
-    )
-    
-    stop_btn.click(
-        fn=stop_processing,
-        outputs=processing_output
-    )
-    
-    maintenance_btn.click(
-        fn=run_ui_maintenance,
-        outputs=maintenance_output
-    )
-    
-    refresh_btn.click(
-        fn=get_live_stats,
-        outputs=stats_display
-    )
-    
-    # Auto-refresh stats every 5 seconds
-    timer = gr.Timer(5)
-    timer.tick(get_live_stats, outputs=stats_display)
-    
-    with gr.Tab("Documentation"):
-        gr.Markdown("""
-        ## 📖 Setup Instructions
-        
-        ### 1. Environment Variables (HF Spaces Secrets)
-        
-        - `DATABASE_URL`: Supabase connection string (PostgreSQL)
-        - `UPLOAD_PROVIDER`: Selected video upload provider (`doodstream` (default), `seekstreaming`, `lulustream`, or `bunny`)
-        - `DOODSTREAM_API_KEY`: DoodStream API key (and optional `DOODSTREAM_BASE_URL`)
-        - `SEEKSTREAMING_API_KEY`: SeekStreaming API key (and optional `SEEKSTREAMING_BASE_URL`)
-        - `LULUSTREAM_API_KEY`: LuluStream API key (and optional `LULUSTREAM_BASE_URL`)
-        - `BUNNY_API_KEY`: Bunny Stream API key (optional)
-        - `BUNNY_LIBRARY_ID`: Bunny Stream library ID (optional)
-        
-        ### 2. How It Works
-        
-        **Phase A (Discovery):**
-        1. Enter website URL
-        2. Harvester crawls pages using pagination (?page=n)
-        3. Auto-stops when no new links found
-        4. Seeds URLs to Supabase database
-        
-        **Phase B (Processing):**
-        1. Fetches PENDING videos from database
-        2. Downloads using yt-dlp
-        3. Uploads to the selected active provider
-        4. Updates status to COMPLETED
-        
-        ### 3. Memory Management
-        
-        **HF Spaces Free Tier: 16GB RAM**
-        
-        - Gradio App: ~1GB
-        - Harvester (Playwright): ~800MB
-        - Workers (2): ~1GB
-        - **Total:** ~2.8GB (Safe)
-        
-        ⚠️ **CRITICAL:** Discovery and Processing run separately to avoid OOM crashes.
-        
-        ### 4. Troubleshooting
-        
-        - **"Too many clients"**: Supabase connection leak. Restart the Space.
-        - **Exit Code 137**: Out of Memory. Reduce MAX_WORKERS or run phases separately.
-        - **No links found**: Check if website has videos or try different URL.
-        
-        ### 5. Database Persistence
-        
-        Supabase ensures your progress is saved even if HF Space restarts. You can resume processing anytime.
-        """)
-
 
     # Login logic
     def verify_login(pwd):
