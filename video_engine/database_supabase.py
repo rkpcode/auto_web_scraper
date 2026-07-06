@@ -394,6 +394,29 @@ class SupabaseManager:
             params.append(url)
             
             cursor.execute(query, params)
+
+    def save_successful_upload(self, url, title, seek_id, dood_id, lulu_id):
+        """
+        Upsert a video record with all provider IDs and real title.
+        Ensures exactly ONE single row contains all the provider IDs together.
+        """
+        with self.get_cursor() as cursor:
+            cursor.execute("""
+                INSERT INTO videos (
+                    original_url, title, status, upload_provider, upload_id, 
+                    seekstreaming_id, doodstream_id, lulustream_id, updated_at
+                ) 
+                VALUES (%s, %s, 'COMPLETED', 'seekstreaming', %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                ON CONFLICT (original_url) DO UPDATE SET
+                    title = EXCLUDED.title,
+                    status = EXCLUDED.status,
+                    upload_provider = EXCLUDED.upload_provider,
+                    upload_id = EXCLUDED.upload_id,
+                    seekstreaming_id = EXCLUDED.seekstreaming_id,
+                    doodstream_id = EXCLUDED.doodstream_id,
+                    lulustream_id = EXCLUDED.lulustream_id,
+                    updated_at = EXCLUDED.updated_at
+            """, (url, title, seek_id, seek_id, dood_id, lulu_id))
     
     def log_error(self, url, error_msg, provider=None):
         """

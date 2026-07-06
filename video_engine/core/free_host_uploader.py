@@ -62,7 +62,7 @@ class FreeHostBaseUploader(BaseUploader):
         return server_url
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=20))
-    def _upload_to_server(self, server_url, filepath):
+    def _upload_to_server(self, server_url, filepath, title=None):
         """
         Step 2: Upload binary to the server.
         """
@@ -78,9 +78,15 @@ class FreeHostBaseUploader(BaseUploader):
         # Note: DoodStream requires 'api_key', SeekStreaming/LuluStream require 'key'
         fields = {self.key_param_name: self.api_key}
 
+        filename = os.path.basename(filepath)
+        if title:
+            safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).strip()
+            if safe_title:
+                filename = f"{safe_title}.mp4"
+
         try:
             with open(filepath, 'rb') as f:
-                files = {'file': (os.path.basename(filepath), f, 'video/mp4')}
+                files = {'file': (filename, f, 'video/mp4')}
                 response = requests.post(server_url, files=files, data=fields, timeout=600)  # long timeout for uploads
         except Exception as e:
             raise UploadError(f"Upload request to {self.provider_name} server failed", details=str(e))
@@ -133,7 +139,7 @@ class FreeHostBaseUploader(BaseUploader):
         Main upload entry point.
         """
         server_url = self._get_upload_server()
-        filecode = self._upload_to_server(server_url, filepath)
+        filecode = self._upload_to_server(server_url, filepath, title)
         return filecode
 
 
@@ -189,6 +195,11 @@ class SeekStreamingUploader(FreeHostBaseUploader):
         logger.info(f"✅ TUS URL received: {tus_url}")
         
         filename = os.path.basename(filepath)
+        if title:
+            safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).strip()
+            if safe_title:
+                filename = f"{safe_title}.mp4"
+                
         file_size = os.path.getsize(filepath)
         
         import base64

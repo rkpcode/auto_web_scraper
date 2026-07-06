@@ -102,6 +102,7 @@ def process_video(url):
         try:
             # 5. Upload to all configured providers sequentially
             success_count = 0
+            provider_ids = {}
             
             for provider in providers_to_upload:
                 # Check if already uploaded to this provider
@@ -109,6 +110,7 @@ def process_video(url):
                 
                 if upload_details.get(prov_col):
                     logger.info(f"Skipping {url} for {provider} (already COMPLETED with ID: {upload_details[prov_col]})")
+                    provider_ids[provider] = upload_details[prov_col]
                     success_count += 1
                     continue
                     
@@ -120,13 +122,7 @@ def process_video(url):
                     video_title = title or filename
                     upload_id = uploader.upload(video_title, filepath)
                     
-                    db_kwargs = {
-                        'upload_provider': provider,
-                        prov_col: upload_id
-                    }
-                    
-                    # NOTE: Update with 'PROCESSING' to save ID but prevent worker conflict
-                    db.update_status(url, 'PROCESSING', **db_kwargs)
+                    provider_ids[provider] = upload_id
                     logger.info(f"SUCCESS: {url} -> {provider.upper()} ID: {upload_id}")
                     success_count += 1
                 except Exception as upload_err:
@@ -136,7 +132,13 @@ def process_video(url):
             
             # 6. Final Status Evaluation
             if success_count == len(providers_to_upload):
-                db.update_status(url, 'COMPLETED')
+                db.save_successful_upload(
+                    url=url,
+                    title=title,
+                    seek_id=provider_ids.get('seekstreaming'),
+                    dood_id=provider_ids.get('doodstream'),
+                    lulu_id=provider_ids.get('lulustream')
+                )
                 logger.info(f"✅ FULLY COMPLETED: {url} across all platforms")
             else:
                 db.update_status(url, 'PENDING')
