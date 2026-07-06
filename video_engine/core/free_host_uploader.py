@@ -114,7 +114,7 @@ class FreeHostBaseUploader(BaseUploader):
         if isinstance(result, list) and len(result) > 0:
             # Check if any file has an error status like "video is too short"
             file_status = result[0].get("status", "OK")
-            if file_status != "OK":
+            if file_status not in ("OK", 200, "200"):
                 raise UploadError(
                     f"Upload rejected by {self.provider_name} server", 
                     details=str(result[0])
