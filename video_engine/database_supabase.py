@@ -10,6 +10,7 @@ from psycopg2.extras import execute_values
 from contextlib import contextmanager
 from datetime import datetime
 import os
+import uuid
 from core.logger import logger
 
 
@@ -169,18 +170,18 @@ class SupabaseManager:
                 # Use execute_values with RETURNING for accurate insert count
                 # NOTE: executemany + ON CONFLICT DO NOTHING gives wrong rowcount
                 insert_query = """
-                    INSERT INTO videos (original_url, status, created_at)
+                    INSERT INTO videos (original_url, status, unique_id, created_at)
                     VALUES %s
                     ON CONFLICT (original_url) DO NOTHING
                 """
                 
-                data = [(url, status) for url in links_list]
+                data = [(url, status, uuid.uuid4().hex) for url in links_list]
                 logger.debug(f"[SUPABASE] Executing batch insert for {len(data)} items...")
                 execute_values(
                     cursor, 
                     insert_query,
                     data,
-                    template="(%s, %s, CURRENT_TIMESTAMP)",
+                    template="(%s, %s, %s, CURRENT_TIMESTAMP)",
                     page_size=100
                 )
                 logger.debug("[SUPABASE] Batch insert execution complete.")
@@ -348,9 +349,9 @@ class SupabaseManager:
         try:
             with self.get_cursor() as cursor:
                 cursor.execute("""
-                    INSERT INTO videos (original_url, status, created_at)
-                    VALUES (%s, %s, CURRENT_TIMESTAMP)
-                """, (url, status))
+                    INSERT INTO videos (original_url, status, unique_id, created_at)
+                    VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
+                """, (url, status, uuid.uuid4().hex))
             return True
         except errors.UniqueViolation:
             # Duplicate URL - already exists

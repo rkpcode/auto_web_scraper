@@ -227,6 +227,32 @@ def run_ui_maintenance():
     except Exception as e:
         return f"❌ Maintenance failed: {str(e)}"
 
+def run_metadata_backfill():
+    """Run metadata backfill script."""
+    try:
+        script_path = str(Path(__file__).parent / "video_engine" / "backfill_metadata.py")
+        process = subprocess.Popen(
+            [sys.executable, script_path],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True
+        )
+        
+        output = ["⏳ Starting metadata backfill (fetching titles, descriptions, and assigning UUIDs)..."]
+        yield "\n".join(output)
+        
+        for line in process.stdout:
+            output.append(line.strip())
+            yield "\n".join(output[-15:])  # Show last 15 lines of logs
+            
+        process.wait()
+        if process.returncode == 0:
+            yield "\n".join(output[-15:]) + "\n\n✅ Backfill completed successfully!"
+        else:
+            yield "\n".join(output[-15:]) + f"\n\n❌ Backfill failed with exit code {process.returncode}"
+    except Exception as e:
+        yield f"❌ Error running backfill script: {str(e)}"
+
 
 # ============================================================================
 # STATS REFRESH (Called every 5 seconds)
@@ -358,9 +384,11 @@ with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
                 processing_output = gr.Textbox(label="Processing Status", lines=3, interactive=False)
                 
                 gr.Markdown("---")
-                gr.Markdown("## 🛠️ Database Maintenance")
-                maintenance_btn = gr.Button("🧹 Clean Failed Videos & Reset Stuck Tasks", variant="stop", size="lg")
-                maintenance_output = gr.Textbox(label="Maintenance Status", lines=2, interactive=False)
+                gr.Markdown("## 🛠️ Database & Metadata Maintenance")
+                with gr.Row():
+                    maintenance_btn = gr.Button("🧹 Clean Failed Videos & Reset Stuck Tasks", variant="stop")
+                    backfill_btn = gr.Button("🔄 Run Metadata Backfill (Title/Desc/UUID)", variant="secondary")
+                maintenance_output = gr.Textbox(label="Maintenance / Logs", lines=5, interactive=False)
             
             with gr.Column(scale=1):
                 gr.Markdown("## 📊 Live Dashboard")
@@ -387,6 +415,11 @@ with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
         
         maintenance_btn.click(
             fn=run_ui_maintenance,
+            outputs=maintenance_output
+        )
+        
+        backfill_btn.click(
+            fn=run_metadata_backfill,
             outputs=maintenance_output
         )
         

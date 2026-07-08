@@ -59,7 +59,7 @@ def process_video(url):
         # 3. Extract video URL and title
         db.update_status(url, 'EXTRACTING', upload_provider=current_provider)
         extractor = get_extractor(url)
-        video_url, title = extractor.extract(url)
+        video_url, title, description = extractor.extract(url)
         
         if not video_url:
             raise ExtractionError("Failed to extract video URL", url=url)
@@ -84,7 +84,9 @@ def process_video(url):
             # 6. Mark as completed
             db_kwargs = {
                 'upload_id': upload_id,
-                'upload_provider': upload_provider
+                'upload_provider': upload_provider,
+                'title': title,
+                'description': description
             }
             if upload_provider == 'bunny':
                 db_kwargs['bunny_guid'] = upload_id
