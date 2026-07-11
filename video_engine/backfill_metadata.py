@@ -47,12 +47,14 @@ def sync_video_metadata(url, unique_id, db_title, db_description, seek_id, dood_
     if title or description:
         video_title = title or "Untitled"
         video_desc = description or ""
+        sync_success = False
         
         # Doodstream
         if dood_id:
             try:
                 get_uploader('doodstream').set_metadata(dood_id, video_title, video_desc)
                 logger.info(f"Synced metadata to Doodstream: {dood_id}")
+                sync_success = True
             except Exception as e:
                 logger.error(f"Doodstream sync failed for {dood_id}: {e}")
                 
@@ -61,6 +63,7 @@ def sync_video_metadata(url, unique_id, db_title, db_description, seek_id, dood_
             try:
                 get_uploader('seekstreaming').set_metadata(seek_id, video_title, video_desc)
                 logger.info(f"Synced metadata to SeekStreaming: {seek_id}")
+                sync_success = True
             except Exception as e:
                 logger.error(f"SeekStreaming sync failed for {seek_id}: {e}")
                 
@@ -69,8 +72,13 @@ def sync_video_metadata(url, unique_id, db_title, db_description, seek_id, dood_
             try:
                 get_uploader('lulustream').set_metadata(lulu_id, video_title, video_desc)
                 logger.info(f"Synced metadata to LuluStream: {lulu_id}")
+                sync_success = True
             except Exception as e:
                 logger.error(f"LuluStream sync failed for {lulu_id}: {e}")
+                
+        # If successfully synced to at least one platform (or attempted all), mark as synced
+        if sync_success or (not dood_id and not seek_id and not lulu_id):
+            db.update_status(url, 'COMPLETED', metadata_synced=True)
                 
     return True
 
@@ -85,7 +93,7 @@ def main():
         cursor.execute("""
             SELECT original_url, unique_id, title, description, seekstreaming_id, doodstream_id, lulustream_id
             FROM videos
-            WHERE status = 'COMPLETED'
+            WHERE status = 'COMPLETED' AND (metadata_synced IS NULL OR metadata_synced = FALSE)
         """)
         
         for row in cursor.fetchall():

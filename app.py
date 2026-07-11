@@ -238,18 +238,12 @@ def run_backfill_background():
     try:
         state.set_backfill_running(True)
         print("[BACKFILL] Starting metadata backfill in background...")
-        script_path = str(Path(__file__).parent / "video_engine" / "backfill_metadata.py")
-        process = subprocess.run(
-            [sys.executable, script_path],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True
-        )
-        if process.returncode == 0:
-            print("[BACKFILL] ✅ Completed successfully!")
-        else:
-            print(f"[BACKFILL] ❌ Failed with exit code {process.returncode}")
-            print(process.stdout)
+        
+        # Import and run directly to avoid DB connection timeouts that happen in subprocesses
+        from video_engine.backfill_metadata import main as backfill_main
+        backfill_main()
+        
+        print("[BACKFILL] ✅ Completed successfully!")
     except Exception as e:
         print(f"[BACKFILL] ❌ Error: {str(e)}")
     finally:

@@ -109,7 +109,8 @@ class SupabaseManager:
                 ADD COLUMN IF NOT EXISTS lulustream_id TEXT,
                 ADD COLUMN IF NOT EXISTS title TEXT,
                 ADD COLUMN IF NOT EXISTS description TEXT,
-                ADD COLUMN IF NOT EXISTS unique_id TEXT
+                ADD COLUMN IF NOT EXISTS unique_id TEXT,
+                ADD COLUMN IF NOT EXISTS metadata_synced BOOLEAN DEFAULT FALSE
             """)
             
             # Create indexes for faster queries
