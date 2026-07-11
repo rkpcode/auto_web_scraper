@@ -255,6 +255,34 @@ def run_metadata_backfill():
 
 
 # ============================================================================
+# DATA EXPLORER REFRESH
+# ============================================================================
+def get_recent_data():
+    """Fetch recent videos for Data Explorer."""
+    try:
+        videos = db.get_recent_videos(limit=50)
+        if not videos:
+            return [["No data", "", "", "", "", "", ""]]
+        
+        # Convert list of dicts to list of lists for Gradio Dataframe
+        headers = ["Title", "SeekStreaming", "DoodStream", "LuluStream", "Completed At", "URL", "Description"]
+        data = []
+        for v in videos:
+            data.append([
+                v["Title"], 
+                v["SeekStreaming"], 
+                v["DoodStream"], 
+                v["LuluStream"], 
+                v["Completed At"], 
+                v["URL"], 
+                v["Description"]
+            ])
+        return data
+    except Exception as e:
+        print(f"Error fetching recent data: {e}")
+        return [["Error", str(e), "", "", "", "", ""]]
+
+# ============================================================================
 # STATS REFRESH (Called every 5 seconds)
 # ============================================================================
 def get_live_stats():
@@ -340,9 +368,11 @@ with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
         
         **Database:** Supabase (PostgreSQL) - State persists across restarts  
         **Workers:** {workers} (Optimized for HF Spaces 16GB RAM)
-        """.format(workers=MAX_WORKERS, provider=UPLOAD_PROVIDER.upper()))
+        """.format(workers=MAX_WORKERS))
     
-        with gr.Row():
+        with gr.Tabs():
+            with gr.Tab("Dashboard"):
+                with gr.Row():
             with gr.Column(scale=1):
                 gr.Markdown("## 🔍 Phase A: Discovery")
                 
@@ -428,13 +458,27 @@ with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
             outputs=stats_display
         )
         
-        # Auto-refresh stats every 5 seconds
-        timer = gr.Timer(5)
-        timer.tick(get_live_stats, outputs=stats_display)
-        
-        with gr.Tab("Documentation"):
-            gr.Markdown("""
-            ## 📖 Setup Instructions
+            # Auto-refresh stats every 5 seconds
+            timer = gr.Timer(5)
+            timer.tick(get_live_stats, outputs=stats_display)
+            
+            with gr.Tab("Data Explorer"):
+                gr.Markdown("## 🗃️ Recently Processed Videos")
+                gr.Markdown("View the latest extracted videos, their generated SEO Titles and Descriptions, and the IDs from SeekStreaming, DoodStream, and LuluStream.")
+                
+                data_grid = gr.Dataframe(
+                    headers=["Title", "SeekStreaming", "DoodStream", "LuluStream", "Completed At", "URL", "Description"],
+                    datatype=["str", "str", "str", "str", "str", "str", "str"],
+                    value=get_recent_data(),
+                    interactive=False,
+                    wrap=True
+                )
+                refresh_data_btn = gr.Button("🔄 Refresh Data", variant="primary")
+                refresh_data_btn.click(fn=get_recent_data, outputs=data_grid)
+            
+            with gr.Tab("Documentation"):
+                gr.Markdown("""
+                ## 📖 Setup Instructions
             
             ### 1. Environment Variables (HF Spaces Secrets)
             

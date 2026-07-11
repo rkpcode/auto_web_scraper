@@ -571,6 +571,40 @@ class SupabaseManager:
             cursor.execute("SELECT COUNT(*) FROM videos")
             return cursor.fetchone()[0]
 
+    def get_recent_videos(self, limit=20):
+        """
+        Fetch the most recently completed videos with their metadata.
+        
+        Args:
+            limit (int): Number of recent records to fetch
+            
+        Returns:
+            list of dict: List containing video metadata (Title, URL, IDs)
+        """
+        with self.get_cursor() as cursor:
+            cursor.execute("""
+                SELECT original_url, title, description, seekstreaming_id, doodstream_id, lulustream_id, updated_at
+                FROM videos 
+                WHERE status = 'COMPLETED'
+                ORDER BY updated_at DESC NULLS LAST
+                LIMIT %s
+            """, (limit,))
+            
+            rows = cursor.fetchall()
+            
+        results = []
+        for row in rows:
+            results.append({
+                "URL": row[0] if row[0] else "",
+                "Title": row[1] if row[1] else "Untitled",
+                "Description": row[2][:50] + "..." if row[2] and len(row[2]) > 50 else (row[2] or ""),
+                "SeekStreaming": row[3] if row[3] else "",
+                "DoodStream": row[4] if row[4] else "",
+                "LuluStream": row[5] if row[5] else "",
+                "Completed At": row[6].strftime("%Y-%m-%d %H:%M:%S") if row[6] else ""
+            })
+        return results
 
-# Singleton instance
+
+# Global thread-safe instance
 db = SupabaseManager()
