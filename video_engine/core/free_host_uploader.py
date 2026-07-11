@@ -134,13 +134,24 @@ class FreeHostBaseUploader(BaseUploader):
         logger.info(f"🎉 Upload to {self.provider_name} successful! Filecode: {filecode}")
         return filecode
 
-    def upload(self, title, filepath):
+    def upload(self, title, filepath, description=None):
         """
         Main upload entry point.
         """
         server_url = self._get_upload_server()
         filecode = self._upload_to_server(server_url, filepath, title)
+        
+        # After upload, set metadata if provider supports it
+        self.set_metadata(filecode, title, description)
+        
         return filecode
+
+    def set_metadata(self, filecode, title, description):
+        """
+        Optional post-upload metadata update.
+        To be implemented by child classes if they don't support passing metadata during upload.
+        """
+        pass
 
 
 class DoodStreamUploader(FreeHostBaseUploader):
@@ -152,6 +163,22 @@ class DoodStreamUploader(FreeHostBaseUploader):
             base_url=DOODSTREAM_BASE_URL,
             key_param_name="api_key"  # DoodStream POST param is api_key
         )
+
+    def set_metadata(self, filecode, title, description):
+        if not title:
+            return
+        
+        url = f"{self.base_url}/api/file/rename"
+        params = {
+            self.key_param_name: self.api_key,
+            "file_code": filecode,
+            "title": title
+        }
+        try:
+            requests.get(url, params=params, timeout=15)
+            logger.info(f"✅ DoodStream metadata set for {filecode}")
+        except Exception as e:
+            logger.warning(f"Failed to set DoodStream metadata for {filecode}: {e}")
 
 
 class SeekStreamingUploader(FreeHostBaseUploader):
@@ -166,7 +193,7 @@ class SeekStreamingUploader(FreeHostBaseUploader):
             key_param_name="key"      # SeekStreaming POST param is key
         )
 
-    def upload(self, title, filepath):
+    def upload(self, title, filepath, description=None):
         """
         Custom V2 TUS upload implementation for SeekStreaming.
         """
@@ -208,12 +235,23 @@ class SeekStreamingUploader(FreeHostBaseUploader):
         b64_filetype = base64.b64encode(b"video/mp4").decode()
         
         metadata_str = f"accessToken {b64_token},filename {b64_filename},filetype {b64_filetype}"
+        plain_metadata = f"accessToken={access_token},filename={filename},filetype=video/mp4"
+        
+        if title:
+            b64_title = base64.b64encode(title.encode('utf-8')).decode()
+            metadata_str += f",title {b64_title}"
+            plain_metadata += f",title={title}"
+            
+        if description:
+            b64_desc = base64.b64encode(description.encode('utf-8')).decode()
+            metadata_str += f",description {b64_desc}"
+            plain_metadata += f",description={description}"
         
         tus_headers = {
             "Tus-Resumable": "1.0.0",
             "Upload-Length": str(file_size),
             "Upload-Metadata": metadata_str,
-            "metadata": f"accessToken={access_token},filename={filename},filetype=video/mp4"
+            "metadata": plain_metadata
         }
         
         logger.info(f"🛰️  [SeekStreaming V2] Initializing TUS session...")
@@ -283,3 +321,23 @@ class LuluStreamUploader(FreeHostBaseUploader):
             base_url=LULUSTREAM_BASE_URL,
             key_param_name="key"      # LuluStream POST param is key
         )
+
+    def set_metadata(self, filecode, title, description):
+        if not title and not description:
+            return
+            
+        url = f"{self.base_url}/api/file/edit"
+        params = {
+            self.key_param_name: self.api_key,
+            "file_code": filecode
+        }
+        if title:
+            params["file_title"] = title
+        if description:
+            params["file_descr"] = description
+            
+        try:
+            requests.get(url, params=params, timeout=15)
+            logger.info(f"✅ LuluStream metadata set for {filecode}")
+        except Exception as e:
+            logger.warning(f"Failed to set LuluStream metadata for {filecode}: {e}")

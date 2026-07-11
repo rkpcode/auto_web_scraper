@@ -87,6 +87,9 @@ def process_video(url):
         if not video_url:
             raise ExtractionError("Failed to extract video URL", url=url)
             
+        from core.utils import clean_metadata
+        title, description = clean_metadata(title, description)
+            
         # Assign unique_id if not already assigned, save title/desc
         db.update_status(url, 'EXTRACTING', title=title, description=description)
         # We also want to save unique_id, let's do it safely (only if it doesn't have one).
@@ -120,7 +123,7 @@ def process_video(url):
                 try:
                     uploader = get_uploader(provider=provider)
                     video_title = title or filename
-                    upload_id = uploader.upload(video_title, filepath)
+                    upload_id = uploader.upload(video_title, filepath, description=description)
                     
                     provider_ids[provider] = upload_id
                     logger.info(f"SUCCESS: {url} -> {provider.upper()} ID: {upload_id}")

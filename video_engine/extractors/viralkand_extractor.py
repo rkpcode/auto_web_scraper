@@ -70,11 +70,30 @@ class ViralkandExtractor(BaseExtractor):
             title = soup.find('title')
             title = title.text.strip() if title else 'Untitled'
             
-            # Extract description
-            description = None
-            meta_desc = soup.find('meta', attrs={'name': 'description'}) or soup.find('meta', attrs={'property': 'og:description'})
-            if meta_desc:
-                description = meta_desc.get('content', '').strip()
+            # Extract description (Full Text)
+            description = ""
+            
+            # 1. Try to find main content block (WordPress standard)
+            content_div = soup.find('div', class_='entry-content') or soup.find('div', class_='description') or soup.find('article')
+            if content_div:
+                # Extract all paragraphs
+                paragraphs = content_div.find_all('p')
+                description = "\n\n".join([p.get_text(strip=True) for p in paragraphs if p.get_text(strip=True)])
+            
+            # 2. Fallback to all paragraphs on the page if still empty
+            if not description or len(description) < 50:
+                paragraphs = soup.find_all('p')
+                # Filter out likely navigation/footer short links
+                valid_p = [p.get_text(strip=True) for p in paragraphs if len(p.get_text(strip=True)) > 30]
+                if valid_p:
+                    description = "\n\n".join(valid_p[:5])  # Take first 5 good paragraphs
+            
+            # 3. Fallback to meta description
+            if not description:
+                meta_desc = soup.find('meta', attrs={'name': 'description'}) or soup.find('meta', attrs={'property': 'og:description'})
+                if meta_desc:
+                    description = meta_desc.get('content', '').strip()
+            
             if not description:
                 description = 'No description available'
             

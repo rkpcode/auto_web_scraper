@@ -60,3 +60,52 @@ def check_disk_space(min_gb=5):
         logger.warning(f"⚠️  Low disk space: {free_gb:.2f}GB remaining (minimum: {min_gb}GB)")
         return False
     return True
+
+def clean_metadata(title, description):
+    """
+    Cleans title and description by replacing competitor domain names with our brand name.
+    Also ensures description is full and appends SEO tags.
+    """
+    import re
+    
+    brand_name = "viral hawas"
+    domains_to_replace = [
+        r'viralkand\.com', r'viralkand', 
+        r'uruduchudai\.com', r'uruduchudai',
+        r'thekamababa\.com', r'thekamababa',
+        r'kamababa'
+    ]
+    
+    # 1. Clean Title
+    if title:
+        for domain in domains_to_replace:
+            title = re.sub(domain, brand_name, title, flags=re.IGNORECASE)
+    else:
+        title = f"Latest {brand_name} video"
+            
+    # 2. Clean Description & expand if too short
+    if description:
+        for domain in domains_to_replace:
+            description = re.sub(domain, brand_name, description, flags=re.IGNORECASE)
+    else:
+        description = ""
+        
+    # If description is too short (truncated meta), use the title to make a full SEO friendly description
+    if len(description) < 50:
+        description = f"{title} - Watch the full viral video exclusively on {brand_name}. We bring you the latest trending, leaked, and viral MMS videos daily. Enjoy high-quality streaming of {brand_name} content.\n\n{description}"
+        
+    # 3. Generate SEO tags
+    # Extract some words from title to use as tags
+    words = [w for w in re.split(r'\W+', title.lower()) if len(w) > 3]
+    tags_list = ['viralhawas', 'desibhabhi', 'viralvideo', 'trending', 'leaked', 'mms'] + words[:5]
+    # Remove duplicates while preserving order
+    seen = set()
+    tags_list = [x for x in tags_list if not (x in seen or seen.add(x))]
+    
+    tags_str = " ".join([f"#{tag}" for tag in tags_list])
+    
+    # Append tags to description
+    if "#viralhawas" not in description:
+        description = f"{description}\n\nTags: {tags_str}"
+        
+    return title.strip(), description.strip()

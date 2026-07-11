@@ -63,6 +63,9 @@ def process_video(url):
         
         if not video_url:
             raise ExtractionError("Failed to extract video URL", url=url)
+            
+        from core.utils import clean_metadata
+        title, description = clean_metadata(title, description)
         
         # 4. Download
         db.update_status(url, 'DOWNLOADING', upload_provider=current_provider)
@@ -79,7 +82,7 @@ def process_video(url):
             
             # Create/upload video
             video_title = title or filename
-            upload_id = uploader.upload(video_title, filepath)
+            upload_id = uploader.upload(video_title, filepath, description=description)
             
             # 6. Mark as completed
             db_kwargs = {

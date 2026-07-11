@@ -12,13 +12,14 @@ class BaseUploader(ABC):
     Abstract base class for all uploaders.
     """
     @abstractmethod
-    def upload(self, title, filepath) -> str:
+    def upload(self, title, filepath, description=None) -> str:
         """
         Uploads the video file to the provider.
         
         Args:
             title: Title of the video
             filepath: Path to local video file
+            description: Description of the video (optional)
             
         Returns:
             str: Unique identifier of the uploaded video (guid or filecode)
@@ -123,7 +124,7 @@ class BunnyUploader(BaseUploader):
             return response.json()
         return None
 
-    def upload(self, title, filepath) -> str:
+    def upload(self, title, filepath, description=None) -> str:
         """
         Uploads the video to Bunny Stream.
         """

@@ -175,6 +175,22 @@ class BrowserExtractor(BaseExtractor):
                     try:
                         title = page.title()
                         description = page.evaluate("""() => {
+                            // 1. Try to find main content block
+                            let contentDiv = document.querySelector('.entry-content') || document.querySelector('.description') || document.querySelector('article');
+                            if (contentDiv) {
+                                let paragraphs = Array.from(contentDiv.querySelectorAll('p'));
+                                let text = paragraphs.map(p => p.innerText.trim()).filter(t => t.length > 0).join('\\n\\n');
+                                if (text.length > 50) return text;
+                            }
+                            
+                            // 2. Fallback to all paragraphs
+                            let allParagraphs = Array.from(document.querySelectorAll('p'));
+                            let validP = allParagraphs.map(p => p.innerText.trim()).filter(t => t.length > 30);
+                            if (validP.length > 0) {
+                                return validP.slice(0, 5).join('\\n\\n');
+                            }
+                            
+                            // 3. Fallback to meta description
                             const meta = document.querySelector('meta[name="description"]') || document.querySelector('meta[property="og:description"]');
                             return meta ? meta.content : 'No description available';
                         }""")
