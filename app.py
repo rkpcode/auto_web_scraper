@@ -232,6 +232,15 @@ def run_ui_maintenance():
         return f"✅ Maintenance Complete!\n- Removed {deleted} failed videos.\n- Reset {reset} stuck/zombie tasks to PENDING."
     except Exception as e:
         return f"❌ Maintenance failed: {str(e)}"
+        
+def run_db_migration():
+    """Manually run database migration to add missing columns."""
+    try:
+        from database_supabase import db
+        db._init_db()
+        return "✅ Database migration ran successfully! All missing columns (including metadata_synced) have been added."
+    except Exception as e:
+        return f"❌ Database migration failed: {str(e)}"
 
 def run_backfill_background():
     """Background worker for metadata backfill."""
@@ -427,6 +436,7 @@ with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
                         with gr.Row():
                             maintenance_btn = gr.Button("🧹 Clean Failed Videos & Reset Stuck Tasks", variant="stop")
                             backfill_btn = gr.Button("🔄 Run Metadata Backfill (Title/Desc/UUID)", variant="secondary")
+                            db_migration_btn = gr.Button("🔧 Run DB Migration", variant="secondary")
                         maintenance_output = gr.Textbox(label="Maintenance / Logs", lines=5, interactive=False)
             
                     with gr.Column(scale=1):
@@ -459,6 +469,11 @@ with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
         
         backfill_btn.click(
             fn=run_metadata_backfill,
+            outputs=maintenance_output
+        )
+        
+        db_migration_btn.click(
+            fn=run_db_migration,
             outputs=maintenance_output
         )
         
