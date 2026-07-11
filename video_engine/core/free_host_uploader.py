@@ -311,6 +311,27 @@ class SeekStreamingUploader(FreeHostBaseUploader):
         logger.info(f"🎉 SeekStreaming upload successful! Filecode: {filecode}")
         return filecode
 
+    def set_metadata(self, filecode, title, description):
+        """Update title and description for an already-uploaded video."""
+        if not title and not description:
+            return
+            
+        url = f"{self.base_url}/api/file/edit"
+        params = {
+            self.key_param_name: self.api_key,
+            "file_code": filecode
+        }
+        if title:
+            params["file_title"] = title
+        if description:
+            params["file_descr"] = description
+            
+        try:
+            requests.get(url, params=params, timeout=15)
+            logger.info(f"✅ SeekStreaming metadata set for {filecode}")
+        except Exception as e:
+            logger.warning(f"Failed to set SeekStreaming metadata for {filecode}: {e}")
+
 
 class LuluStreamUploader(FreeHostBaseUploader):
     def __init__(self):
