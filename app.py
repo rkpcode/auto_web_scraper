@@ -373,58 +373,58 @@ with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
         with gr.Tabs():
             with gr.Tab("Dashboard"):
                 with gr.Row():
-            with gr.Column(scale=1):
-                gr.Markdown("## 🔍 Phase A: Discovery")
+                    with gr.Column(scale=1):
+                        gr.Markdown("## 🔍 Phase A: Discovery")
                 
-                website_input = gr.Textbox(
-                    label="Website URL",
-                    placeholder="https://example.com",
-                    info="Enter the website to scrape videos from"
-                )
+                        website_input = gr.Textbox(
+                            label="Website URL",
+                            placeholder="https://example.com",
+                            info="Enter the website to scrape videos from"
+                        )
                 
-                max_pages_slider = gr.Slider(
-                    minimum=0,
-                    maximum=20,
-                    value=0,
-                    step=1,
-                    label="Max Pages to Crawl (0 = Unlimited)",
-                    info="Set to 0 to scrape till the last page (auto-stops when no new links found)"
-                )
+                        max_pages_slider = gr.Slider(
+                            minimum=0,
+                            maximum=20,
+                            value=0,
+                            step=1,
+                            label="Max Pages to Crawl (0 = Unlimited)",
+                            info="Set to 0 to scrape till the last page (auto-stops when no new links found)"
+                        )
                 
-                start_page_slider = gr.Slider(
-                    minimum=1,
-                    maximum=100,
-                    value=1,
-                    step=1,
-                    label="Start Page Number",
-                    info="Useful for resuming or skipping initial pages"
-                )
+                        start_page_slider = gr.Slider(
+                            minimum=1,
+                            maximum=100,
+                            value=1,
+                            step=1,
+                            label="Start Page Number",
+                            info="Useful for resuming or skipping initial pages"
+                        )
                 
-                discovery_btn = gr.Button("🔍 Start Discovery", variant="primary", size="lg")
-                discovery_output = gr.Textbox(label="Discovery Status", lines=3, interactive=False)
+                        discovery_btn = gr.Button("🔍 Start Discovery", variant="primary", size="lg")
+                        discovery_output = gr.Textbox(label="Discovery Status", lines=3, interactive=False)
                 
-                gr.Markdown("---")
-                gr.Markdown("## 🚀 Phase B: Processing")
+                        gr.Markdown("---")
+                        gr.Markdown("## 🚀 Phase B: Processing")
                 
-                gr.Markdown("ℹ️ **Multi-Upload Mode:** Videos will be sequentially uploaded to Doodstream, Seekstreaming, and Lulustream and linked with a unique ID.")
+                        gr.Markdown("ℹ️ **Multi-Upload Mode:** Videos will be sequentially uploaded to Doodstream, Seekstreaming, and Lulustream and linked with a unique ID.")
                 
-                with gr.Row():
-                    processing_btn = gr.Button("🚀 Start Processing", variant="primary", size="lg")
-                    stop_btn = gr.Button("🛑 Stop Processing", variant="stop", size="lg")
-                processing_output = gr.Textbox(label="Processing Status", lines=3, interactive=False)
+                        with gr.Row():
+                            processing_btn = gr.Button("🚀 Start Processing", variant="primary", size="lg")
+                            stop_btn = gr.Button("🛑 Stop Processing", variant="stop", size="lg")
+                        processing_output = gr.Textbox(label="Processing Status", lines=3, interactive=False)
                 
-                gr.Markdown("---")
-                gr.Markdown("## 🛠️ Database & Metadata Maintenance")
-                with gr.Row():
-                    maintenance_btn = gr.Button("🧹 Clean Failed Videos & Reset Stuck Tasks", variant="stop")
-                    backfill_btn = gr.Button("🔄 Run Metadata Backfill (Title/Desc/UUID)", variant="secondary")
-                maintenance_output = gr.Textbox(label="Maintenance / Logs", lines=5, interactive=False)
+                        gr.Markdown("---")
+                        gr.Markdown("## 🛠️ Database & Metadata Maintenance")
+                        with gr.Row():
+                            maintenance_btn = gr.Button("🧹 Clean Failed Videos & Reset Stuck Tasks", variant="stop")
+                            backfill_btn = gr.Button("🔄 Run Metadata Backfill (Title/Desc/UUID)", variant="secondary")
+                        maintenance_output = gr.Textbox(label="Maintenance / Logs", lines=5, interactive=False)
             
-            with gr.Column(scale=1):
-                gr.Markdown("## 📊 Live Dashboard")
-                stats_display = gr.Markdown(value=get_live_stats())
+                    with gr.Column(scale=1):
+                        gr.Markdown("## 📊 Live Dashboard")
+                        stats_display = gr.Markdown(value=get_live_stats())
                 
-                refresh_btn = gr.Button("🔄 Refresh Stats")
+                        refresh_btn = gr.Button("🔄 Refresh Stats")
         
         # Event handlers
         discovery_btn.click(
@@ -458,26 +458,26 @@ with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
             outputs=stats_display
         )
         
-            # Auto-refresh stats every 5 seconds
-            timer = gr.Timer(5)
-            timer.tick(get_live_stats, outputs=stats_display)
+        # Auto-refresh stats every 5 seconds
+        timer = gr.Timer(5)
+        timer.tick(get_live_stats, outputs=stats_display)
+        
+        with gr.Tab("Data Explorer"):
+            gr.Markdown("## 🗃️ Recently Processed Videos")
+            gr.Markdown("View the latest extracted videos, their generated SEO Titles and Descriptions, and the IDs from SeekStreaming, DoodStream, and LuluStream.")
             
-            with gr.Tab("Data Explorer"):
-                gr.Markdown("## 🗃️ Recently Processed Videos")
-                gr.Markdown("View the latest extracted videos, their generated SEO Titles and Descriptions, and the IDs from SeekStreaming, DoodStream, and LuluStream.")
-                
-                data_grid = gr.Dataframe(
-                    headers=["Title", "SeekStreaming", "DoodStream", "LuluStream", "Completed At", "URL", "Description"],
-                    datatype=["str", "str", "str", "str", "str", "str", "str"],
-                    value=get_recent_data(),
-                    interactive=False,
-                    wrap=True
-                )
-                refresh_data_btn = gr.Button("🔄 Refresh Data", variant="primary")
-                refresh_data_btn.click(fn=get_recent_data, outputs=data_grid)
-            
-            with gr.Tab("Documentation"):
-                gr.Markdown("""
+            data_grid = gr.Dataframe(
+                headers=["Title", "SeekStreaming", "DoodStream", "LuluStream", "Completed At", "URL", "Description"],
+                datatype=["str", "str", "str", "str", "str", "str", "str"],
+                value=get_recent_data(),
+                interactive=False,
+                wrap=True
+            )
+            refresh_data_btn = gr.Button("🔄 Refresh Data", variant="primary")
+            refresh_data_btn.click(fn=get_recent_data, outputs=data_grid)
+        
+        with gr.Tab("Documentation"):
+            gr.Markdown("""
                 ## 📖 Setup Instructions
             
             ### 1. Environment Variables (HF Spaces Secrets)
