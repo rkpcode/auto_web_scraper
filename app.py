@@ -42,6 +42,7 @@ class PipelineState:
     def __init__(self):
         self.discovery_running = False
         self.processing_running = False
+        self.backfill_running = False
         self.discovery_stats = {}
         self.processing_stats = {'completed': 0, 'failed': 0}
         self.lock = threading.Lock()
@@ -53,6 +54,10 @@ class PipelineState:
     def set_processing_running(self, running):
         with self.lock:
             self.processing_running = running
+            
+    def set_backfill_running(self, running):
+        with self.lock:
+            self.backfill_running = running
     
     def update_discovery_stats(self, stats):
         with self.lock:
@@ -67,6 +72,7 @@ class PipelineState:
             return {
                 'discovery_running': self.discovery_running,
                 'processing_running': self.processing_running,
+                'backfill_running': self.backfill_running,
                 'discovery_stats': self.discovery_stats.copy(),
                 'processing_stats': self.processing_stats.copy()
             }
@@ -227,31 +233,40 @@ def run_ui_maintenance():
     except Exception as e:
         return f"❌ Maintenance failed: {str(e)}"
 
-def run_metadata_backfill():
-    """Run metadata backfill script."""
+def run_backfill_background():
+    """Background worker for metadata backfill."""
     try:
+        state.set_backfill_running(True)
+        print("[BACKFILL] Starting metadata backfill in background...")
         script_path = str(Path(__file__).parent / "video_engine" / "backfill_metadata.py")
-        process = subprocess.Popen(
+        process = subprocess.run(
             [sys.executable, script_path],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True
         )
-        
-        output = ["⏳ Starting metadata backfill (fetching titles, descriptions, and assigning UUIDs)..."]
-        yield "\n".join(output)
-        
-        for line in process.stdout:
-            output.append(line.strip())
-            yield "\n".join(output[-15:])  # Show last 15 lines of logs
-            
-        process.wait()
         if process.returncode == 0:
-            yield "\n".join(output[-15:]) + "\n\n✅ Backfill completed successfully!"
+            print("[BACKFILL] ✅ Completed successfully!")
         else:
-            yield "\n".join(output[-15:]) + f"\n\n❌ Backfill failed with exit code {process.returncode}"
+            print(f"[BACKFILL] ❌ Failed with exit code {process.returncode}")
+            print(process.stdout)
     except Exception as e:
-        yield f"❌ Error running backfill script: {str(e)}"
+        print(f"[BACKFILL] ❌ Error: {str(e)}")
+    finally:
+        state.set_backfill_running(False)
+
+def run_metadata_backfill():
+    """Start metadata backfill phase (non-blocking)."""
+    if state.backfill_running:
+        return "⚠️ Backfill is already running in the background. Please wait..."
+        
+    thread = threading.Thread(
+        target=run_backfill_background,
+        daemon=True
+    )
+    thread.start()
+    
+    return "🔄 Metadata Backfill started in the background!\nYou can safely close this window. Check Hugging Face Space Logs for detailed progress."
 
 
 # ============================================================================
