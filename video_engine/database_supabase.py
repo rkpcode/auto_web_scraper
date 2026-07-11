@@ -41,7 +41,13 @@ class SupabaseManager:
             )
         
         # Test connection on init
-        self._init_db()
+        try:
+            self._init_db()
+        except psycopg2.Error as e:
+            if "timeout" in str(e).lower() or getattr(e, 'pgcode', None) == '57014':
+                logger.warning(f"Database initialization timed out (likely concurrent workers). Continuing... ({e})")
+            else:
+                logger.error(f"Database initialization failed: {e}")
         logger.info("[OK] Supabase connection established")
     
     @contextmanager
