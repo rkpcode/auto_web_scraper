@@ -237,8 +237,39 @@ def run_db_migration():
     """Manually run database migration to add missing columns."""
     try:
         from database_supabase import db
-        db._init_db()
-        return "✅ Database migration ran successfully! All missing columns (including metadata_synced) have been added."
+        with db.get_cursor() as cursor:
+            # 1. Terminate other connections to release any active locks
+            try:
+                cursor.execute("""
+                    SELECT pg_terminate_backend(pid) 
+                    FROM pg_stat_activity 
+                    WHERE pid <> pg_backend_pid() 
+                      AND usename = current_user;
+                """)
+                terminated = cursor.rowcount
+                print(f"[MIGRATION] Terminated {terminated} other database connections to release locks.")
+            except Exception as lock_err:
+                print(f"[MIGRATION] Could not terminate other connections: {lock_err}")
+                
+            # 2. Run the ALTER TABLE statement
+            cursor.execute("""
+                ALTER TABLE videos 
+                ADD COLUMN IF NOT EXISTS upload_provider TEXT,
+                ADD COLUMN IF NOT EXISTS upload_id TEXT,
+                ADD COLUMN IF NOT EXISTS doodstream_id TEXT,
+                ADD COLUMN IF NOT EXISTS seekstreaming_id TEXT,
+                ADD COLUMN IF NOT EXISTS lulustream_id TEXT,
+                ADD COLUMN IF NOT EXISTS title TEXT,
+                ADD COLUMN IF NOT EXISTS description TEXT,
+                ADD COLUMN IF NOT EXISTS unique_id TEXT,
+                ADD COLUMN IF NOT EXISTS metadata_synced BOOLEAN DEFAULT FALSE
+            """)
+            
+            # 3. Create indexes
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_status ON videos(status)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_created_at ON videos(created_at)")
+            
+        return "✅ Database migration ran successfully! All missing columns (including metadata_synced) have been added after releasing active locks."
     except Exception as e:
         return f"❌ Database migration failed: {str(e)}"
 
