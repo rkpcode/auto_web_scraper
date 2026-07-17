@@ -309,26 +309,37 @@ class SeekStreamingUploader(FreeHostBaseUploader):
             raise UploadError("Failed to extract filecode from TUS upload session", details=upload_url)
             
         logger.info(f"🎉 SeekStreaming upload successful! Filecode: {filecode}")
+        
+        # Explicitly set metadata after upload using v1 API
+        self.set_metadata(filecode, title, description)
+        
         return filecode
 
     def set_metadata(self, filecode, title, description):
-        """Update title and description for an already-uploaded video."""
+        """Update title and description for an already-uploaded video using v1 API."""
         if not title and not description:
             return
             
-        url = f"{self.base_url}/api/file/edit"
-        params = {
-            self.key_param_name: self.api_key,
-            "file_code": filecode
+        url = f"{self.base_url}/api/v1/video/manage/{filecode}"
+        headers = {
+            "api-token": self.api_key,
+            "Accept": "application/json",
+            "Content-Type": "application/json"
         }
+        
+        payload = {}
         if title:
-            params["file_title"] = title
+            payload["name"] = title
         if description:
-            params["file_descr"] = description
+            payload["description"] = description
             
         try:
-            requests.get(url, params=params, timeout=15)
-            logger.info(f"✅ SeekStreaming metadata set for {filecode}")
+            response = requests.patch(url, headers=headers, json=payload, timeout=15)
+            # Accept 200 or 204
+            if response.status_code not in (200, 204):
+                logger.warning(f"Failed to set SeekStreaming metadata for {filecode}: HTTP {response.status_code} - {response.text[:100]}")
+            else:
+                logger.info(f"✅ SeekStreaming metadata set for {filecode}")
         except Exception as e:
             logger.warning(f"Failed to set SeekStreaming metadata for {filecode}: {e}")
 
