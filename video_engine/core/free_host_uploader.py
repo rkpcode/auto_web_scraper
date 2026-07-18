@@ -195,7 +195,8 @@ class SeekStreamingUploader(FreeHostBaseUploader):
 
     def upload(self, title, filepath, description=None):
         """
-        Custom V2 TUS upload implementation for SeekStreaming.
+        Custom V2 TUS upload implementation for SeekStreaming with chunked upload support.
+        Handles files >100MB by uploading in chunks to avoid Cloudflare 413 limit.
         """
         url = f"{self.base_url}/api/v1/video/upload"
         headers = {"api-token": self.api_key}
@@ -267,6 +268,18 @@ class SeekStreamingUploader(FreeHostBaseUploader):
             
         logger.info(f"✅ TUS upload session initialized successfully. URL: {upload_url}")
         
+        # Chunked upload for large files
+        CHUNK_SIZE = 50 * 1024 * 1024  # 50MB chunks (safe under Cloudflare 100MB limit)
+        
+        if file_size <= CHUNK_SIZE:
+            # Small file - single upload (original behavior)
+            return self._tus_upload_single(upload_url, filepath, file_size, metadata_str)
+        else:
+            # Large file - chunked upload
+            return self._tus_upload_chunked(upload_url, filepath, file_size, metadata_str, CHUNK_SIZE)
+    
+    def _tus_upload_single(self, upload_url, filepath, file_size, metadata_str):
+        """Upload small file in single PATCH request."""
         logger.info(f"⬆️  [SeekStreaming V2] Uploading binary of size {file_size / (1024*1024):.2f}MB...")
         
         patch_headers = {
@@ -305,6 +318,79 @@ class SeekStreamingUploader(FreeHostBaseUploader):
             raise UploadError("Failed to extract filecode from TUS upload session", details=upload_url)
             
         logger.info(f"🎉 SeekStreaming upload successful! Filecode: {filecode}")
+        
+        # Explicitly set metadata after upload using v1 API
+        self.set_metadata(filecode, title, description)
+        
+        return filecode
+    
+    def _tus_upload_chunked(self, upload_url, filepath, file_size, metadata_str, chunk_size):
+        """Upload large file in chunks using TUS resumable protocol."""
+        logger.info(f"⬆️  [SeekStreaming V2] Chunked upload: {file_size / (1024*1024):.2f}MB in {chunk_size / (1024*1024):.0f}MB chunks...")
+        
+        offset = 0
+        with open(filepath, 'rb') as f:
+            while offset < file_size:
+                # Calculate chunk size for this iteration
+                remaining = file_size - offset
+                current_chunk_size = min(chunk_size, remaining)
+                
+                logger.info(f"📤 Uploading chunk: {offset / (1024*1024):.2f}MB - {(offset + current_chunk_size) / (1024*1024):.2f}MB ({current_chunk_size / (1024*1024):.2f}MB)")
+                
+                # Read chunk
+                chunk_data = f.read(current_chunk_size)
+                if len(chunk_data) != current_chunk_size:
+                    raise UploadError(f"Failed to read chunk at offset {offset}: expected {current_chunk_size} bytes, got {len(chunk_data)}")
+                
+                patch_headers = {
+                    "Tus-Resumable": "1.0.0",
+                    "Upload-Offset": str(offset),
+                    "Content-Type": "application/offset+octet-stream",
+                    "Upload-Metadata": metadata_str
+                }
+                
+                try:
+                    patch_response = requests.patch(upload_url, headers=patch_headers, data=chunk_data, timeout=600)
+                except Exception as e:
+                    raise UploadError(f"TUS chunk upload failed at offset {offset}", details=str(e))
+                
+                if patch_response.status_code not in (204, 200):
+                    # Check if we need to get current offset from server (resume capability)
+                    if patch_response.status_code == 409:  # Conflict - get current offset
+                        head_response = requests.head(upload_url, headers={"Tus-Resumable": "1.0.0"}, timeout=30)
+                        if head_response.status_code == 200:
+                            server_offset = int(head_response.headers.get("Upload-Offset", 0))
+                            logger.warning(f"Server offset mismatch: local={offset}, server={server_offset}. Resuming...")
+                            offset = server_offset
+                            f.seek(offset)
+                            continue
+                    raise UploadError(
+                        f"TUS chunk upload failed at offset {offset} (HTTP {patch_response.status_code})",
+                        details=patch_response.text[:200]
+                    )
+                
+                offset += current_chunk_size
+                logger.info(f"✅ Chunk uploaded successfully. Progress: {offset / file_size * 100:.1f}%")
+        
+        logger.info("✅ TUS chunked upload complete.")
+        
+        filecode = upload_url.rstrip("/").split("/")[-1]
+        
+        # Try to get filecode from final response
+        try:
+            # Some TUS servers return filecode in final response
+            res_data = patch_response.json()
+            if res_data and "filecode" in res_data:
+                filecode = res_data.get("filecode")
+            elif res_data and "id" in res_data:
+                filecode = res_data.get("id")
+        except Exception:
+            pass
+            
+        if not filecode:
+            raise UploadError("Failed to extract filecode from TUS upload session", details=upload_url)
+            
+        logger.info(f"🎉 SeekStreaming chunked upload successful! Filecode: {filecode}")
         
         # Explicitly set metadata after upload using v1 API
         self.set_metadata(filecode, title, description)
