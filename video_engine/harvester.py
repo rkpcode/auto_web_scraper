@@ -85,10 +85,23 @@ class BaseHarvester:
                 '/search/', '/login/', '/register/', '/contact/',
                 '/dmca/', '/terms/', '/privacy/', '/about/',
                 '/18-u-s-c/', '/compliance/', '/cookie/',
-                '.jpg', '.png', '.gif', '.css', '.js'
+                '.jpg', '.png', '.gif', '.css', '.js',
+                '/top-rated/', '/latest-updates/', '/tags/',
+                '/cuckold/', '/family-sex/', '/erotic-sex/',
+                '/cute-girl/', '/porn-bhabhi/', '/sexy-tiktok/',
+                '/pakistani-pussy/', '/pakistani-cuckold/',
+                '/fingering-porn/', '/whatsapp-sex/', '/karachi-sex/',
+                '/pakistani-blowjob/', '/pakistani-celebrity/',
+                '/pakistani-sister/', '/nangi-chudai/', '/paki-sex/',
+                '/pakistani-fucking/', '/viral-sex/', '/college-girls/',
+                '/2257/', '/xxx-hd-video/', '/paki-xxx-movies/'
             ]
             
             if any(pattern in url.lower() for pattern in skip_patterns):
+                continue
+            
+            # Must contain /video/ in path to be a video page
+            if '/video/' not in url.lower():
                 continue
             
             # Check if likely a video page
@@ -169,7 +182,7 @@ class GenericHarvester(BaseHarvester):
                 self.discovered_urls.update(video_urls)
                 
                 # Find pagination/category pages for further crawling
-                pagination_patterns = ['/page/', '?page=', '/category/']
+                pagination_patterns = ['/page/', '?page=']
                 for link in all_links:
                     if any(pattern in link for pattern in pagination_patterns):
                         if link not in crawled_pages and link not in pages_to_crawl:

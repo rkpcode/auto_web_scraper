@@ -2,7 +2,12 @@ import os
 import uuid
 import random
 import shutil
+import subprocess
+import json
 from core.logger import logger
+
+
+MIN_VIDEO_DURATION_SECONDS = 1.0
 
 
 def get_random_user_agent():
@@ -34,6 +39,29 @@ def cleanup_file(filepath):
             logger.warning(f"Failed to delete {filepath}: {e}")
 
 
+def get_video_duration(filepath):
+    """
+    Get video duration in seconds using ffprobe.
+    Returns 0.0 if ffprobe fails or video is corrupted.
+    """
+    try:
+        result = subprocess.run([
+            'ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+            '-of', 'json', filepath
+        ], capture_output=True, text=True, timeout=10)
+        
+        if result.returncode == 0:
+            data = json.loads(result.stdout)
+            duration = float(data.get('format', {}).get('duration', 0))
+            return duration
+        else:
+            logger.warning(f"ffprobe failed for {filepath}: {result.stderr}")
+            return 0.0
+    except Exception as e:
+        logger.warning(f"Could not get video duration for {filepath}: {e}")
+        return 0.0
+
+
 def get_disk_free_space_gb(path=None):
     """
     Get free disk space in GB.
@@ -60,6 +88,73 @@ def check_disk_space(min_gb=5):
         logger.warning(f"⚠️  Low disk space: {free_gb:.2f}GB remaining (minimum: {min_gb}GB)")
         return False
     return True
+
+
+def validate_video_file(filepath, min_duration_seconds=1.0):
+    """
+    Validate video file has valid duration and is not corrupted.
+    Uses ffprobe (part of ffmpeg) to check duration.
+    
+    Args:
+        filepath: Path to video file
+        min_duration_seconds: Minimum acceptable duration (default 1 second)
+    
+    Returns:
+        float: Video duration in seconds
+    
+    Raises:
+        UploadError: If video is too short, corrupted, or ffprobe fails
+    """
+    import subprocess
+    from core.exceptions import UploadError
+    
+    if not os.path.exists(filepath):
+        raise UploadError(f"Video file not found: {filepath}")
+    
+    file_size = os.path.getsize(filepath)
+    if file_size == 0:
+        raise UploadError(f"Video file is empty (0 bytes): {filepath}")
+    
+    # Check file size - if less than 100KB, likely corrupted
+    if file_size < 100 * 1024:
+        raise UploadError(f"Video file too small ({file_size} bytes), likely corrupted: {filepath}")
+    
+    try:
+        # Use ffprobe to get duration
+        cmd = [
+            'ffprobe', '-v', 'error',
+            '-select_streams', 'v:0',
+            '-show_entries', 'stream=duration',
+            '-of', 'default=noprint_wrappers=1:nokey=1',
+            filepath
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        
+        if result.returncode != 0:
+            # ffprobe failed - might be corrupted or not a video
+            raise UploadError(f"ffprobe failed for {filepath}: {result.stderr}")
+        
+        duration_str = result.stdout.strip()
+        if not duration_str:
+            raise UploadError(f"Could not determine video duration for {filepath}")
+        
+        duration = float(duration_str)
+        
+        if duration < min_duration_seconds:
+            raise UploadError(f"Video duration too short: {duration:.2f}s (minimum: {min_duration_seconds}s)")
+        
+        logger.info(f"✅ Video validation passed: {os.path.basename(filepath)} - Duration: {duration:.2f}s, Size: {file_size / (1024*1024):.2f}MB")
+        return duration
+        
+    except subprocess.TimeoutExpired:
+        raise UploadError(f"ffprobe timeout for {filepath}")
+    except ValueError:
+        raise UploadError(f"Invalid duration output from ffprobe for {filepath}: {result.stdout}")
+    except Exception as e:
+        if isinstance(e, UploadError):
+            raise
+        raise UploadError(f"Video validation failed for {filepath}: {str(e)}")
+
 
 def clean_metadata(title, description):
     """

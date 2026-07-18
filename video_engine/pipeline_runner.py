@@ -102,6 +102,10 @@ def process_video(url):
         downloader = VideoDownloader()
         filename, filepath = downloader.download(video_url, original_page_url=url)
         
+        # Validate video file before uploading
+        from core.utils import validate_video_file
+        validate_video_file(filepath)
+        
         try:
             # 5. Upload to all configured providers sequentially
             success_count = 0
