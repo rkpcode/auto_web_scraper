@@ -282,6 +282,68 @@ def reset_seekstreaming_metadata():
     except Exception as e:
         return f"❌ Failed to reset SeekStreaming videos: {str(e)}"
 
+def delete_all_seekstreaming_api_background():
+    """Background worker to delete all SeekStreaming videos via API and reset to PENDING."""
+    try:
+        print("[API DELETE] Starting to delete all SeekStreaming videos...")
+        import requests
+        from database_supabase import db
+        import config
+        
+        with db.get_cursor() as cursor:
+            cursor.execute("SELECT original_url, seekstreaming_id FROM videos WHERE seekstreaming_id IS NOT NULL")
+            rows = cursor.fetchall()
+            
+        if not rows:
+            print("[API DELETE] No SeekStreaming videos found to delete.")
+            return
+            
+        print(f"[API DELETE] Found {len(rows)} videos to delete from SeekStreaming.")
+        
+        deleted_count = 0
+        failed_count = 0
+        
+        for url, filecode in rows:
+            try:
+                # Call Delete API
+                api_url = f"{config.SEEKSTREAMING_BASE_URL}/api/file/delete"
+                params = {
+                    "key": config.SEEKSTREAMING_API_KEY,
+                    "file_code": filecode
+                }
+                res = requests.get(api_url, params=params, timeout=10)
+                
+                with db.get_cursor() as cursor:
+                    cursor.execute("""
+                        UPDATE videos 
+                        SET seekstreaming_id = NULL,
+                            status = 'PENDING',
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE original_url = %s
+                    """, (url,))
+                    
+                deleted_count += 1
+                if deleted_count % 10 == 0:
+                    print(f"[API DELETE] Deleted {deleted_count}/{len(rows)} videos...")
+                
+            except Exception as err:
+                failed_count += 1
+                print(f"[API DELETE] Failed to delete {filecode}: {err}")
+                
+        print(f"[API DELETE] Complete! Deleted {deleted_count} videos successfully. ({failed_count} failed)")
+        
+    except Exception as e:
+        print(f"[API DELETE] Fatal Error: {str(e)}")
+
+def trigger_delete_all_seekstreaming():
+    """Start API delete process (non-blocking)."""
+    thread = threading.Thread(
+        target=delete_all_seekstreaming_api_background,
+        daemon=True
+    )
+    thread.start()
+    return "💥 API Delete Process started in background! Check logs for progress. Videos will be marked as PENDING so you can re-upload them."
+
 def run_backfill_background():
     """Background worker for metadata backfill."""
     try:
@@ -479,6 +541,7 @@ with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
                             db_migration_btn = gr.Button("🔧 Run DB Migration", variant="secondary")
                         with gr.Row():
                             reset_seek_btn = gr.Button("🔄 Re-upload SeekStreaming (Missing Metadata)", variant="secondary")
+                            delete_api_btn = gr.Button("💥 Delete ALL SeekStreaming Videos (API) & Re-upload", variant="stop")
                         maintenance_output = gr.Textbox(label="Maintenance / Logs", lines=5, interactive=False)
             
                     with gr.Column(scale=1):
@@ -521,6 +584,11 @@ with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
         
         reset_seek_btn.click(
             fn=reset_seekstreaming_metadata,
+            outputs=maintenance_output
+        )
+        
+        delete_api_btn.click(
+            fn=trigger_delete_all_seekstreaming,
             outputs=maintenance_output
         )
         
