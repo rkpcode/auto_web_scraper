@@ -306,12 +306,11 @@ def delete_all_seekstreaming_api_background():
         for url, filecode in rows:
             try:
                 # Call Delete API
-                api_url = f"{config.SEEKSTREAMING_BASE_URL}/api/file/delete"
-                params = {
-                    "key": config.SEEKSTREAMING_API_KEY,
-                    "file_code": filecode
+                api_url = f"{config.SEEKSTREAMING_BASE_URL}/api/v1/video/manage/{filecode}"
+                headers = {
+                    "api-token": config.SEEKSTREAMING_API_KEY
                 }
-                res = requests.get(api_url, params=params, timeout=10)
+                res = requests.delete(api_url, headers=headers, timeout=10)
                 
                 with db.get_cursor() as cursor:
                     cursor.execute("""
