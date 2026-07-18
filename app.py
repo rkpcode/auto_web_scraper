@@ -422,7 +422,7 @@ with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
         # 🎬 Video Scraper Pipeline (Two-Phase Model)
         
         **Phase A:** Discovery - Harvester scans pages and seeds database  
-        **Phase B:** Processing - Workers download and sequentially upload videos to **Doodstream, Seekstreaming, and Lulustream**  
+        **Phase B:** Processing - Workers download and sequentially upload videos to **SeekStreaming (Primary), Doodstream (Backup), and Lulustream (Backup)**  
         
         **Database:** Supabase (PostgreSQL) - State persists across restarts  
         **Workers:** {workers} (Optimized for HF Spaces 16GB RAM)
@@ -464,7 +464,7 @@ with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
                         gr.Markdown("---")
                         gr.Markdown("## 🚀 Phase B: Processing")
                 
-                        gr.Markdown("ℹ️ **Multi-Upload Mode:** Videos will be sequentially uploaded to Doodstream, Seekstreaming, and Lulustream and linked with a unique ID.")
+                        gr.Markdown("ℹ️ **Multi-Upload Mode:** Videos will be sequentially uploaded to SeekStreaming (Primary), followed by Doodstream and Lulustream (Backups).")
                 
                         with gr.Row():
                             processing_btn = gr.Button("🚀 Start Processing", variant="primary", size="lg")
@@ -554,7 +554,7 @@ with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
             ### 1. Environment Variables (HF Spaces Secrets)
             
             - `DATABASE_URL`: Supabase connection string (PostgreSQL)
-            - `UPLOAD_PROVIDER`: Selected video upload provider (`doodstream` (default), `seekstreaming`, `lulustream`, or `bunny`)
+            - `UPLOAD_PROVIDER`: Selected video upload provider (`seekstreaming` (default), `doodstream`, `lulustream`, or `bunny`)
             - `DOODSTREAM_API_KEY`: DoodStream API key (and optional `DOODSTREAM_BASE_URL`)
             - `SEEKSTREAMING_API_KEY`: SeekStreaming API key (and optional `SEEKSTREAMING_BASE_URL`)
             - `LULUSTREAM_API_KEY`: LuluStream API key (and optional `LULUSTREAM_BASE_URL`)
