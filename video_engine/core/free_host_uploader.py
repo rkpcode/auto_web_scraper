@@ -235,23 +235,19 @@ class SeekStreamingUploader(FreeHostBaseUploader):
         b64_filetype = base64.b64encode(b"video/mp4").decode()
         
         metadata_str = f"accessToken {b64_token},filename {b64_filename},filetype {b64_filetype}"
-        plain_metadata = f"accessToken={access_token},filename={filename},filetype=video/mp4"
         
         if title:
             b64_title = base64.b64encode(title.encode('utf-8')).decode()
             metadata_str += f",title {b64_title}"
-            plain_metadata += f",title={title}"
             
         if description:
             b64_desc = base64.b64encode(description.encode('utf-8')).decode()
             metadata_str += f",description {b64_desc}"
-            plain_metadata += f",description={description}"
         
         tus_headers = {
             "Tus-Resumable": "1.0.0",
             "Upload-Length": str(file_size),
-            "Upload-Metadata": metadata_str,
-            "metadata": plain_metadata
+            "Upload-Metadata": metadata_str
         }
         
         logger.info(f"🛰️  [SeekStreaming V2] Initializing TUS session...")
