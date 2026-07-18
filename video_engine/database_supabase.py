@@ -478,6 +478,30 @@ class SupabaseManager:
         
         return affected
     
+    def reset_seekstreaming_missing_metadata(self):
+        """
+        Reset SeekStreaming upload status for videos that are missing metadata (title/description).
+        This makes them PENDING again so they can be re-uploaded to SeekStreaming.
+        
+        Returns:
+            int: Number of videos reset
+        """
+        with self.get_cursor() as cursor:
+            cursor.execute("""
+                UPDATE videos 
+                SET seekstreaming_id = NULL,
+                    status = 'PENDING',
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE seekstreaming_id IS NOT NULL 
+                  AND (title IS NULL OR title = '')
+            """)
+            affected = cursor.rowcount
+        
+        if affected > 0:
+            logger.info(f"[RESET] Reset {affected} SeekStreaming videos with missing metadata to PENDING")
+            
+        return affected
+    
     def get_stats(self, provider=None):
         """
         Get status distribution for monitoring dashboard.

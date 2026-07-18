@@ -273,6 +273,15 @@ def run_db_migration():
     except Exception as e:
         return f"❌ Database migration failed: {str(e)}"
 
+def reset_seekstreaming_metadata():
+    """Reset SeekStreaming videos with missing metadata to PENDING."""
+    try:
+        from database_supabase import db
+        affected = db.reset_seekstreaming_missing_metadata()
+        return f"✅ Successfully reset {affected} SeekStreaming videos with missing metadata to PENDING. They will be re-uploaded on next processing run."
+    except Exception as e:
+        return f"❌ Failed to reset SeekStreaming videos: {str(e)}"
+
 def run_backfill_background():
     """Background worker for metadata backfill."""
     try:
@@ -468,6 +477,8 @@ with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
                             maintenance_btn = gr.Button("🧹 Clean Failed Videos & Reset Stuck Tasks", variant="stop")
                             backfill_btn = gr.Button("🔄 Run Metadata Backfill (Title/Desc/UUID)", variant="secondary")
                             db_migration_btn = gr.Button("🔧 Run DB Migration", variant="secondary")
+                        with gr.Row():
+                            reset_seek_btn = gr.Button("🔄 Re-upload SeekStreaming (Missing Metadata)", variant="secondary")
                         maintenance_output = gr.Textbox(label="Maintenance / Logs", lines=5, interactive=False)
             
                     with gr.Column(scale=1):
@@ -505,6 +516,11 @@ with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
         
         db_migration_btn.click(
             fn=run_db_migration,
+            outputs=maintenance_output
+        )
+        
+        reset_seek_btn.click(
+            fn=reset_seekstreaming_metadata,
             outputs=maintenance_output
         )
         
