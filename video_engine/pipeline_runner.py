@@ -107,13 +107,18 @@ def process_video(url):
             success_count = 0
             provider_ids = {}
             
+            # Get fresh upload details at start
+            upload_details = db.get_all_upload_ids(url) or {}
+            
             for provider in providers_to_upload:
-                # Check if already uploaded to this provider
+                # Check if already uploaded to this provider (refresh from DB each iteration for safety)
                 prov_col = f"{provider}_id"
                 
-                if upload_details.get(prov_col):
-                    logger.info(f"Skipping {url} for {provider} (already COMPLETED with ID: {upload_details[prov_col]})")
-                    provider_ids[provider] = upload_details[prov_col]
+                # Re-fetch to handle concurrent runs or previous iterations in this same run
+                current_details = db.get_all_upload_ids(url) or {}
+                if current_details.get(prov_col):
+                    logger.info(f"Skipping {url} for {provider} (already COMPLETED with ID: {current_details[prov_col]})")
+                    provider_ids[provider] = current_details[prov_col]
                     success_count += 1
                     continue
                     
@@ -124,6 +129,9 @@ def process_video(url):
                     uploader = get_uploader(provider=provider)
                     video_title = title or filename
                     upload_id = uploader.upload(video_title, filepath, description=description)
+                    
+                    # IMMEDIATELY save this provider's ID to database so it's not lost on partial failure
+                    db.update_status(url, 'UPLOADING', **{prov_col: upload_id}, local_filename=filename, upload_provider=provider)
                     
                     provider_ids[provider] = upload_id
                     logger.info(f"SUCCESS: {url} -> {provider.upper()} ID: {upload_id}")
