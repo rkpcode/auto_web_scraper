@@ -409,21 +409,44 @@ class SeekStreamingUploader(FreeHostBaseUploader):
             "Content-Type": "application/json"
         }
         
+        # SeekStreaming API accepts 'title' (or 'name' in some v1 versions)
         payload = {}
         if title:
+            payload["title"] = title
             payload["name"] = title
         if description:
             payload["description"] = description
             
         try:
             response = requests.patch(url, headers=headers, json=payload, timeout=15)
-            # Accept 200 or 204
-            if response.status_code not in (200, 204):
-                logger.warning(f"Failed to set SeekStreaming metadata for {filecode}: HTTP {response.status_code} - {response.text[:100]}")
+            # Accept 200, 201, 204
+            if response.status_code not in (200, 201, 204):
+                logger.warning(f"SeekStreaming PATCH metadata failed for {filecode}: HTTP {response.status_code} - {response.text[:200]}")
+                # Fallback to legacy API endpoint if v1 PATCH fails
+                self._fallback_set_metadata(filecode, title, description)
             else:
                 logger.info(f"✅ SeekStreaming metadata set for {filecode}")
         except Exception as e:
-            logger.warning(f"Failed to set SeekStreaming metadata for {filecode}: {e}")
+            logger.warning(f"SeekStreaming PATCH metadata error for {filecode}: {e}")
+            self._fallback_set_metadata(filecode, title, description)
+
+    def _fallback_set_metadata(self, filecode, title, description):
+        """Fallback method using legacy /api/file/edit endpoint for SeekStreaming/StreamWish."""
+        try:
+            url = f"{self.base_url}/api/file/edit"
+            params = {
+                "key": self.api_key,
+                "file_code": filecode
+            }
+            if title:
+                params["file_title"] = title
+            if description:
+                params["file_descr"] = description
+            res = requests.get(url, params=params, timeout=15)
+            logger.info(f"✅ SeekStreaming legacy metadata set attempt for {filecode}: HTTP {res.status_code}")
+        except Exception as err:
+            logger.warning(f"SeekStreaming fallback metadata update failed for {filecode}: {err}")
+
 
 
 class LuluStreamUploader(FreeHostBaseUploader):

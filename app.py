@@ -285,7 +285,7 @@ def reset_seekstreaming_metadata():
 def delete_all_seekstreaming_api_background():
     """Background worker to delete all SeekStreaming videos via API and reset to PENDING."""
     try:
-        print("[API DELETE] Starting to delete all SeekStreaming videos...")
+        print("[API DELETE] Starting to delete all SeekStreaming videos from storage...")
         import requests
         from database_supabase import db
         import config
@@ -298,38 +298,64 @@ def delete_all_seekstreaming_api_background():
             print("[API DELETE] No SeekStreaming videos found to delete.")
             return
             
-        print(f"[API DELETE] Found {len(rows)} videos to delete from SeekStreaming.")
+        print(f"[API DELETE] Found {len(rows)} videos to delete from SeekStreaming storage.")
         
         deleted_count = 0
         failed_count = 0
         
         for url, filecode in rows:
+            is_deleted = False
             try:
-                # Call Delete API
+                # 1. Try v1 DELETE API
                 api_url = f"{config.SEEKSTREAMING_BASE_URL}/api/v1/video/manage/{filecode}"
                 headers = {
-                    "api-token": config.SEEKSTREAMING_API_KEY
+                    "api-token": config.SEEKSTREAMING_API_KEY,
+                    "Authorization": f"Bearer {config.SEEKSTREAMING_API_KEY}",
+                    "Accept": "application/json"
                 }
                 res = requests.delete(api_url, headers=headers, timeout=10)
                 
-                with db.get_cursor() as cursor:
-                    cursor.execute("""
-                        UPDATE videos 
-                        SET seekstreaming_id = NULL,
-                            status = 'PENDING',
-                            updated_at = CURRENT_TIMESTAMP
-                        WHERE original_url = %s
-                    """, (url,))
+                # 200, 204 = Deleted. 404 = Already deleted from storage.
+                if res.status_code in (200, 204, 404):
+                    is_deleted = True
+                    print(f"[API DELETE] ✅ Successfully deleted {filecode} via v1 API (HTTP {res.status_code})")
+                else:
+                    print(f"[API DELETE] v1 DELETE failed for {filecode}: HTTP {res.status_code} - {res.text[:150]}")
                     
-                deleted_count += 1
-                if deleted_count % 10 == 0:
-                    print(f"[API DELETE] Deleted {deleted_count}/{len(rows)} videos...")
+                    # 2. Try legacy API endpoint fallback (StreamWish / SeekStreaming legacy)
+                    legacy_url = f"{config.SEEKSTREAMING_BASE_URL}/api/file/delete"
+                    params = {
+                        "key": config.SEEKSTREAMING_API_KEY,
+                        "file_code": filecode
+                    }
+                    res_leg = requests.get(legacy_url, params=params, timeout=10)
+                    if res_leg.status_code in (200, 204) or "status" in res_leg.text.lower():
+                        is_deleted = True
+                        print(f"[API DELETE] ✅ Successfully deleted {filecode} via legacy API (HTTP {res_leg.status_code})")
+                    else:
+                        print(f"[API DELETE] ❌ Legacy DELETE also failed for {filecode}: HTTP {res_leg.status_code} - {res_leg.text[:150]}")
+                
+                if is_deleted:
+                    with db.get_cursor() as cursor:
+                        cursor.execute("""
+                            UPDATE videos 
+                            SET seekstreaming_id = NULL,
+                                status = 'PENDING',
+                                updated_at = CURRENT_TIMESTAMP
+                            WHERE original_url = %s
+                        """, (url,))
+                    deleted_count += 1
+                else:
+                    failed_count += 1
+                    
+                if (deleted_count + failed_count) % 10 == 0:
+                    print(f"[API DELETE] Progress: {deleted_count + failed_count}/{len(rows)} processed ({deleted_count} deleted, {failed_count} failed)...")
                 
             except Exception as err:
                 failed_count += 1
-                print(f"[API DELETE] Failed to delete {filecode}: {err}")
+                print(f"[API DELETE] Exception deleting {filecode}: {err}")
                 
-        print(f"[API DELETE] Complete! Deleted {deleted_count} videos successfully. ({failed_count} failed)")
+        print(f"[API DELETE] Complete! Deleted {deleted_count}/{len(rows)} videos successfully from storage. ({failed_count} failed)")
         
     except Exception as e:
         print(f"[API DELETE] Fatal Error: {str(e)}")
