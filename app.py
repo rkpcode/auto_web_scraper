@@ -431,7 +431,7 @@ def get_recent_data():
 # STATS REFRESH (Called every 5 seconds)
 # ============================================================================
 def get_live_stats():
-    """Get current database stats for dashboard."""
+    """Get clean, simple, and beautiful database stats for dashboard."""
     try:
         db_stats = db.get_stats(provider=None)
         total = db.get_total_count()
@@ -439,52 +439,61 @@ def get_live_stats():
         
         current_state = state.get_state()
         
-        # Build stats table
-        stats_md = "### 📊 Global Database Statistics\n\n"
-        stats_md += "### 📊 Database Statistics\n\n"
-        stats_md += "| Status | Count |\n|--------|-------|\n"
+        pending_count = db_stats.get('PENDING', 0)
+        completed_count = db_stats.get('COMPLETED', 0)
+        failed_count = db_stats.get('FAILED', 0)
         
-        for status, count in sorted(db_stats.items()):
-            stats_md += f"| {status} | {count} |\n"
+        # 1. Summary Cards Section
+        stats_md = "### 📊 Database Summary\n\n"
+        stats_md += f"- 📁 **Total Scraped Links**: **{total:,}**\n"
+        stats_md += f"- ⏳ **Pending (Remaining to Process)**: **{pending_count:,}**\n"
+        stats_md += f"- ✅ **Fully Completed (All Platforms)**: **{completed_count:,}**\n"
+        if failed_count > 0:
+            stats_md += f"- ❌ **Failed**: **{failed_count:,}**\n"
+        stats_md += "\n---\n\n"
         
-        stats_md += f"| **TOTAL** | **{total}** |\n\n"
-        
-        # Provider-wise upload stats
+        # 2. Platform Breakdown Table
         if provider_stats:
-            provider_icons = {
-                'doodstream': '🟢',
-                'seekstreaming': '🔵', 
-                'lulustream': '🟣',
-                'bunny': '🟠',
-                'unknown': '⚪'
+            provider_names = {
+                'seekstreaming': ('🔵 SeekStreaming', 'SeekStreaming'),
+                'doodstream': ('🟢 DoodStream', 'DoodStream'),
+                'lulustream': ('🟣 LuluStream', 'LuluStream'),
+                'bunny': ('🟠 Bunny Stream', 'Bunny')
             }
             
-            stats_md += "### 🏢 Provider-wise Uploads\n\n"
-            stats_md += "| Provider | Completed |\n|----------|----------|\n"
+            stats_md += "### 🏢 Upload Progress by Platform\n\n"
+            stats_md += "| Platform | Uploaded Videos | Remaining |\n"
+            stats_md += "| :--- | :---: | :---: |\n"
             
-            total_uploaded = 0
-            for provider, count in provider_stats.items():
-                icon = provider_icons.get(provider, '⚪')
-                stats_md += f"| {icon} {provider.upper()} | {count} |\n"
-                total_uploaded += count
+            for key, (display_name, _) in provider_names.items():
+                uploaded = provider_stats.get(key, 0)
+                remaining = max(0, total - uploaded)
+                stats_md += f"| {display_name} | **{uploaded:,}** | **{remaining:,}** |\n"
             
-            stats_md += f"| **TOTAL UPLOADED** | **{total_uploaded}** |\n\n"
+            stats_md += "\n---\n\n"
         
-        # Add phase status
-        stats_md += "### 🔄 Pipeline Status\n\n"
+        # 3. Pipeline Status
+        stats_md += "### 🔄 Active Pipeline Status\n\n"
         
-        if current_state['discovery_running']:
-            stats_md += "🔍 **Discovery:** Running...\n\n"
+        disc_running = current_state['discovery_running']
+        proc_running = current_state['processing_running']
+        
+        if disc_running:
+            stats_md += "🔍 **Discovery Phase**: ⏳ Running...\n"
         elif current_state['discovery_stats']:
             stats = current_state['discovery_stats']
             if 'error' in stats:
-                stats_md += f"❌ **Discovery:** Error - {stats['error']}\n\n"
+                stats_md += f"🔍 **Discovery Phase**: ❌ Error ({stats['error']})\n"
             else:
-                stats_md += f"✅ **Discovery:** Complete ({stats.get('links_found', 0)} links found, {stats.get('links_added', 0)} new)\n\n"
-        
-        if current_state['processing_running']:
+                stats_md += f"🔍 **Discovery Phase**: ✅ Last Run Complete ({stats.get('links_found', 0):,} found, {stats.get('links_added', 0):,} new)\n"
+        else:
+            stats_md += "🔍 **Discovery Phase**: ⏸️ Idle\n"
+            
+        if proc_running:
             proc_stats = current_state['processing_stats']
-            stats_md += f"🚀 **Processing:** Running (✅ {proc_stats['completed']} | ❌ {proc_stats['failed']})\n\n"
+            stats_md += f"🚀 **Processing Phase**: ⏳ Running (✅ {proc_stats['completed']:,} succeeded | ❌ {proc_stats['failed']:,} failed)\n"
+        else:
+            stats_md += "🚀 **Processing Phase**: ⏸️ Idle\n"
         
         return stats_md
     except Exception as e:
