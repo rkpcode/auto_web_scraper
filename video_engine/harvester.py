@@ -100,10 +100,6 @@ class BaseHarvester:
             if any(pattern in url.lower() for pattern in skip_patterns):
                 continue
             
-            # Must contain /video/ in path to be a video page
-            if '/video/' not in url.lower():
-                continue
-            
             # Check if likely a video page
             if self.is_video_page(url):
                 filtered.add(url)
@@ -484,7 +480,8 @@ class ViralkandHarvester(BaseHarvester):
         blacklist = [
             'category', 'tag', 'author', 'page', 'search', 'login', 'register',
             'contact', 'about', 'dmca', 'privacy', 'terms', 'cookie', 
-            '18-u-s-c', 'compliance', 'uploads', 'wp-content', 'wp-includes'
+            '18-u-s-c', 'compliance', 'uploads', 'wp-content', 'wp-includes',
+            'categories', 'tags'
         ]
         
         parts = path.split('/')
@@ -550,14 +547,14 @@ def harvest_and_save(base_url, method='auto', max_pages=5, start_page=1):
             - 'links_found': Total unique links discovered
             - 'links_added': New links added to database
     """
-    if method == 'sitemap':
+    if 'viralkand.com' in base_url or 'thekamababa.com' in base_url:
+        harvester = ViralkandHarvester(base_url)
+    elif method == 'sitemap':
         harvester = SitemapHarvester(base_url)
     elif method == 'generic':
         harvester = GenericHarvester(base_url)
     elif method == 'pagination':
         harvester = LinkHarvester(base_url)
-    elif 'viralkand.com' in base_url or 'thekamababa.com' in base_url:
-        harvester = ViralkandHarvester(base_url)
     else:  # auto
         # Try pagination first (best for most sites), fallback to sitemap
         harvester = LinkHarvester(base_url)
