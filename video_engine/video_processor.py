@@ -11,7 +11,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config import MAX_WORKERS, MIN_FREE_DISK_GB
-from database import db
+from database_supabase import db
 from core.logger import logger
 from core.downloader import VideoDownloader
 from core.uploader import get_uploader
@@ -148,7 +148,7 @@ def main():
     
     # Get pending/failed URLs from database (including completed videos on other providers)
     import config
-    pending_urls = db.get_pending_urls(current_provider=config.UPLOAD_PROVIDER)
+    pending_urls = db.get_pending_videos(current_provider=config.UPLOAD_PROVIDER)
     
     if not pending_urls:
         logger.info("No pending URLs in database")
@@ -159,7 +159,7 @@ def main():
             file_urls = load_urls_from_file(urls_file)
             for url in file_urls:
                 db.insert_video(url)
-            pending_urls = db.get_pending_urls()
+            pending_urls = db.get_pending_videos()
     
     logger.info(f"Processing {len(pending_urls)} URLs with {MAX_WORKERS} workers")
     
