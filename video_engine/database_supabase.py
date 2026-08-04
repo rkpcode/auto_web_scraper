@@ -149,6 +149,13 @@ class SupabaseManager:
                 SET bunny_guid = upload_id 
                 WHERE upload_provider = 'bunny' AND bunny_guid IS NULL AND upload_id IS NOT NULL
             """)
+            
+            # Automatically update any video with seekstreaming_id to COMPLETED status
+            cursor.execute("""
+                UPDATE videos 
+                SET status = 'COMPLETED' 
+                WHERE seekstreaming_id IS NOT NULL AND status != 'COMPLETED'
+            """)
     
     def bulk_seed_links(self, links, status='PENDING'):
         """
@@ -212,7 +219,8 @@ class SupabaseManager:
     
     def get_pending_videos(self, current_provider=None):
         """
-        Get all URLs with status PENDING, FAILED, or COMPLETED where the specific provider's column is null.
+        Get all URLs where SeekStreaming (or active provider) upload is missing (ID is NULL).
+        Videos that already have seekstreaming_id are NEVER returned.
         
         Args:
             current_provider (str, optional): The currently selected upload provider.
@@ -235,7 +243,7 @@ class SupabaseManager:
                         SELECT original_url 
                         FROM videos 
                         WHERE status IN ('PENDING', 'FAILED')
-                           OR (status = 'COMPLETED' AND {prov_col} IS NULL)
+                          AND {prov_col} IS NULL
                         ORDER BY created_at ASC
                     """
                     cursor.execute(query)
@@ -244,7 +252,7 @@ class SupabaseManager:
                         SELECT original_url 
                         FROM videos 
                         WHERE status IN ('PENDING', 'FAILED')
-                           OR (status = 'COMPLETED' AND (upload_provider IS NULL OR upload_provider != %s))
+                          AND (upload_provider IS NULL OR upload_provider != %s)
                         ORDER BY created_at ASC
                     """, (provider,))
             else:
@@ -252,6 +260,7 @@ class SupabaseManager:
                     SELECT original_url 
                     FROM videos 
                     WHERE status IN ('PENDING', 'FAILED')
+                      AND seekstreaming_id IS NULL
                     ORDER BY created_at ASC
                 """)
             urls = [row[0] for row in cursor.fetchall()]
@@ -455,19 +464,20 @@ class SupabaseManager:
             provider: Active upload provider
         """
         with self.get_cursor() as cursor:
+            status_expr = "CASE WHEN seekstreaming_id IS NOT NULL THEN 'COMPLETED' ELSE 'FAILED' END"
             if provider:
-                cursor.execute("""
+                cursor.execute(f"""
                     UPDATE videos 
-                    SET status = 'FAILED', 
+                    SET status = {status_expr}, 
                         error_message = %s, 
                         upload_provider = %s,
                         updated_at = CURRENT_TIMESTAMP
                     WHERE original_url = %s
                 """, (error_msg, provider, url))
             else:
-                cursor.execute("""
+                cursor.execute(f"""
                     UPDATE videos 
-                    SET status = 'FAILED', 
+                    SET status = {status_expr}, 
                         error_message = %s, 
                         updated_at = CURRENT_TIMESTAMP
                     WHERE original_url = %s
@@ -476,7 +486,7 @@ class SupabaseManager:
     def reset_stale_statuses(self):
         """
         Reset zombie threads from previous crashes.
-        DOWNLOADING/UPLOADING/EXTRACTING → PENDING
+        DOWNLOADING/UPLOADING/EXTRACTING → PENDING (or COMPLETED if seekstreaming_id exists)
         
         Call this on app startup to recover from HF Space restarts.
         
@@ -486,14 +496,14 @@ class SupabaseManager:
         with self.get_cursor() as cursor:
             cursor.execute("""
                 UPDATE videos 
-                SET status = 'PENDING', 
+                SET status = CASE WHEN seekstreaming_id IS NOT NULL THEN 'COMPLETED' ELSE 'PENDING' END, 
                     updated_at = CURRENT_TIMESTAMP
                 WHERE status IN ('DOWNLOADING', 'UPLOADING', 'EXTRACTING')
             """)
             affected = cursor.rowcount
         
         if affected > 0:
-            logger.info(f"[RESET] Reset {affected} stale videos to PENDING")
+            logger.info(f"[RESET] Reset {affected} stale videos")
         
         return affected
     

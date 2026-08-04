@@ -346,7 +346,15 @@ def run_db_migration():
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_status ON videos(status)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_created_at ON videos(created_at)")
             
-        return "✅ Database migration ran successfully! All missing columns (including metadata_synced) have been added after releasing active locks."
+            # 4. Update status for all videos with seekstreaming_id to COMPLETED
+            cursor.execute("""
+                UPDATE videos 
+                SET status = 'COMPLETED' 
+                WHERE seekstreaming_id IS NOT NULL AND status != 'COMPLETED'
+            """)
+            fixed_count = cursor.rowcount
+            
+        return f"✅ Database migration ran successfully! Updated {fixed_count} existing SeekStreaming videos to COMPLETED status."
     except Exception as e:
         return f"❌ Database migration failed: {str(e)}"
 
