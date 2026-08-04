@@ -46,7 +46,8 @@ def process_video(url):
             logger.info(f"Stop requested. Skipping {url}")
             return
             
-        current_provider = config.UPLOAD_PROVIDER
+        # Get upload details from database
+        upload_details = db.get_all_upload_ids(url) or {}
         
         # SeekStreaming is the primary compulsory provider, followed by backup hosts
         providers_to_upload = ['seekstreaming', 'doodstream', 'lulustream']
