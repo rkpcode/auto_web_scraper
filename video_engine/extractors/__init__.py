@@ -19,9 +19,9 @@ def get_extractor(url):
     Returns:
         BaseExtractor: Appropriate extractor instance
     """
-    # Protected sites that need browser automation (viralkand, kamababa)
+    # Protected sites that need browser automation
     # Using BrowserExtractor for all to ensure maximum reliability (as per user request)
-    if USE_BROWSER_FOR_PROTECTED_SITES and ("viralkand.com" in url or "thekamababa.com" in url):
+    if USE_BROWSER_FOR_PROTECTED_SITES and any(domain in url for domain in ["viralkand.com", "thekamababa.com", "viralmms.site", "urduchudai.com"]):
         from extractors.browser_extractor import BrowserExtractor
         return BrowserExtractor()
     
