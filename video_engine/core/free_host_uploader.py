@@ -273,12 +273,12 @@ class SeekStreamingUploader(FreeHostBaseUploader):
         
         if file_size <= CHUNK_SIZE:
             # Small file - single upload (original behavior)
-            return self._tus_upload_single(upload_url, filepath, file_size, metadata_str)
+            return self._tus_upload_single(upload_url, filepath, file_size, metadata_str, title, description)
         else:
             # Large file - chunked upload
-            return self._tus_upload_chunked(upload_url, filepath, file_size, metadata_str, CHUNK_SIZE)
+            return self._tus_upload_chunked(upload_url, filepath, file_size, metadata_str, CHUNK_SIZE, title, description)
     
-    def _tus_upload_single(self, upload_url, filepath, file_size, metadata_str):
+    def _tus_upload_single(self, upload_url, filepath, file_size, metadata_str, title, description):
         """Upload small file in single PATCH request."""
         logger.info(f"⬆️  [SeekStreaming V2] Uploading binary of size {file_size / (1024*1024):.2f}MB...")
         
@@ -324,7 +324,7 @@ class SeekStreamingUploader(FreeHostBaseUploader):
         
         return filecode
     
-    def _tus_upload_chunked(self, upload_url, filepath, file_size, metadata_str, chunk_size):
+    def _tus_upload_chunked(self, upload_url, filepath, file_size, metadata_str, chunk_size, title, description):
         """Upload large file in chunks using TUS resumable protocol."""
         logger.info(f"⬆️  [SeekStreaming V2] Chunked upload: {file_size / (1024*1024):.2f}MB in {chunk_size / (1024*1024):.0f}MB chunks...")
         
