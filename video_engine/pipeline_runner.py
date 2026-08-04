@@ -48,24 +48,17 @@ def process_video(url):
             
         current_provider = config.UPLOAD_PROVIDER
         
-        # Get all upload details to support simultaneous multi-provider uploads
-        upload_details = db.get_all_upload_ids(url) or {}
-        providers_to_upload = ['doodstream', 'seekstreaming', 'lulustream']
+        # SeekStreaming is the primary compulsory provider, followed by backup hosts
+        providers_to_upload = ['seekstreaming', 'doodstream', 'lulustream']
         
-        # Check how many providers are already uploaded
-        completed_providers = 0
-        for provider in providers_to_upload:
-            prov_col = f"{provider}_id"
-            if upload_details.get(prov_col):
-                completed_providers += 1
-                
-        # If all platforms have an ID, mark COMPLETED and skip
-        if completed_providers == len(providers_to_upload):
-            logger.info(f"Skipping {url} (already fully COMPLETED across all {len(providers_to_upload)} platforms)")
+        # Check if SeekStreaming is already uploaded
+        seek_id = upload_details.get('seekstreaming_id')
+        if seek_id:
+            logger.info(f"Skipping {url} (already COMPLETED on SeekStreaming: {seek_id})")
             db.update_status(url, 'COMPLETED')
             return
             
-        logger.info(f"Processing {url} ({completed_providers}/{len(providers_to_upload)} platforms complete)")
+        logger.info(f"Processing {url} for primary upload to SeekStreaming...")
         
         unique_id = str(uuid.uuid4())
         
@@ -91,11 +84,7 @@ def process_video(url):
         title, description = clean_metadata(title, description)
             
         # Assign unique_id if not already assigned, save title/desc
-        db.update_status(url, 'EXTRACTING', title=title, description=description)
-        # We also want to save unique_id, let's do it safely (only if it doesn't have one).
-        # We will just unconditionally set it if we want, or fetch it. Since `url` is UNIQUE, we can set unique_id.
-        # But wait, it's safer to only set unique_id if it's a new scrape. Let's just update it here.
-        db.update_status(url, 'EXTRACTING', unique_id=unique_id)
+        db.update_status(url, 'EXTRACTING', title=title, description=description, unique_id=unique_id)
         
         # 4. Download
         db.update_status(url, 'DOWNLOADING')
@@ -107,21 +96,17 @@ def process_video(url):
         validate_video_file(filepath)
         
         try:
-            # 5. Upload to all configured providers sequentially
+            # 5. Upload to SeekStreaming (Primary) first, then backup hosts
             success_count = 0
             provider_ids = {}
             
-            # Get fresh upload details at start
-            upload_details = db.get_all_upload_ids(url) or {}
-            
             for provider in providers_to_upload:
-                # Check if already uploaded to this provider (refresh from DB each iteration for safety)
                 prov_col = f"{provider}_id"
                 
-                # Re-fetch to handle concurrent runs or previous iterations in this same run
+                # Re-fetch to handle concurrent runs or previous iterations
                 current_details = db.get_all_upload_ids(url) or {}
                 if current_details.get(prov_col):
-                    logger.info(f"Skipping {url} for {provider} (already COMPLETED with ID: {current_details[prov_col]})")
+                    logger.info(f"Skipping {url} for {provider} (already uploaded with ID: {current_details[prov_col]})")
                     provider_ids[provider] = current_details[prov_col]
                     success_count += 1
                     continue
@@ -134,7 +119,7 @@ def process_video(url):
                     video_title = title or filename
                     upload_id = uploader.upload(video_title, filepath, description=description)
                     
-                    # IMMEDIATELY save this provider's ID to database so it's not lost on partial failure
+                    # Save this provider's ID to database immediately
                     db.update_status(url, 'UPLOADING', **{prov_col: upload_id}, local_filename=filename, upload_provider=provider)
                     
                     provider_ids[provider] = upload_id
@@ -142,22 +127,29 @@ def process_video(url):
                     success_count += 1
                 except Exception as upload_err:
                     logger.error(f"FAILED to upload to {provider}: {str(upload_err)}")
-                    db.log_error(url, f"Upload to {provider} failed: {str(upload_err)}", provider=provider)
-                    # We continue to the next provider instead of failing the whole process
+                    if provider == 'seekstreaming':
+                        # SeekStreaming is compulsory, re-raise error to handle status in outer except/evaluation
+                        raise upload_err
+                    else:
+                        # Backup providers (doodstream/lulustream) failures are logged as warnings
+                        db.log_error(url, f"Backup upload to {provider} failed: {str(upload_err)}", provider=provider)
             
             # 6. Final Status Evaluation
-            if success_count == len(providers_to_upload):
+            current_details = db.get_all_upload_ids(url) or {}
+            seek_upload_id = provider_ids.get('seekstreaming') or current_details.get('seekstreaming_id')
+            
+            if seek_upload_id:
                 db.save_successful_upload(
                     url=url,
                     title=title,
-                    seek_id=provider_ids.get('seekstreaming'),
-                    dood_id=provider_ids.get('doodstream'),
-                    lulu_id=provider_ids.get('lulustream')
+                    seek_id=seek_upload_id,
+                    dood_id=provider_ids.get('doodstream') or current_details.get('doodstream_id'),
+                    lulu_id=provider_ids.get('lulustream') or current_details.get('lulustream_id')
                 )
-                logger.info(f"✅ FULLY COMPLETED: {url} across all platforms")
+                logger.info(f"✅ COMPLETED on SeekStreaming: {url} ({success_count}/{len(providers_to_upload)} platforms complete)")
             else:
                 db.update_status(url, 'PENDING')
-                logger.warning(f"⚠️ PARTIAL SUCCESS: {url} ({success_count}/{len(providers_to_upload)}). Returning to PENDING.")
+                logger.warning(f"⚠️ SeekStreaming upload missing for {url}. Status set to PENDING.")
         
         finally:
             # GUARANTEED cleanup (even if upload fails)
@@ -175,6 +167,71 @@ def process_video(url):
         db.log_error(url, str(e), provider=current_provider)
         
         # Cleanup on failure too
+        if filepath:
+            cleanup_file(filepath)
+
+
+def process_backup_video(url):
+    """
+    Backup upload workflow: Downloads video and uploads ONLY to missing backup platforms (DoodStream, LuluStream)
+    for videos that are already COMPLETED on SeekStreaming.
+    """
+    filepath = None
+    try:
+        import config
+        if getattr(config, "STOP_PROCESSING", False):
+            logger.info(f"Stop requested. Skipping backup for {url}")
+            return
+
+        upload_details = db.get_all_upload_ids(url) or {}
+        missing_providers = []
+        if not upload_details.get('doodstream_id'):
+            missing_providers.append('doodstream')
+        if not upload_details.get('lulustream_id'):
+            missing_providers.append('lulustream')
+
+        if not missing_providers:
+            logger.info(f"Skipping backup for {url} (already uploaded to all backup hosts)")
+            return
+
+        logger.info(f"Processing backup uploads for {url} -> missing hosts: {missing_providers}")
+
+        if not check_disk_space(MIN_FREE_DISK_GB):
+            logger.warning(f"Low disk space, pausing backup processing for {url}")
+            time.sleep(10)
+            if not check_disk_space(MIN_FREE_DISK_GB):
+                raise DiskSpaceError(f"Insufficient disk space (< {MIN_FREE_DISK_GB}GB)", url=url)
+
+        extractor = get_extractor(url)
+        video_url, title, description = extractor.extract(url)
+
+        if not video_url:
+            raise ExtractionError("Failed to extract video URL for backup upload", url=url)
+
+        from core.utils import clean_metadata
+        title, description = clean_metadata(title, description)
+
+        downloader = VideoDownloader()
+        filename, filepath = downloader.download(video_url, original_page_url=url)
+
+        from core.utils import validate_video_file
+        validate_video_file(filepath)
+
+        try:
+            for provider in missing_providers:
+                logger.info(f"Uploading backup {url} to {provider}...")
+                uploader = get_uploader(provider=provider)
+                video_title = title or filename
+                upload_id = uploader.upload(video_title, filepath, description=description)
+
+                prov_col = f"{provider}_id"
+                db.update_status(url, 'COMPLETED', **{prov_col: upload_id})
+                logger.info(f"✅ BACKUP SUCCESS: {url} -> {provider.upper()} ID: {upload_id}")
+        finally:
+            cleanup_file(filepath)
+
+    except Exception as e:
+        logger.error(f"Backup processing failed for {url}: {e}")
         if filepath:
             cleanup_file(filepath)
 

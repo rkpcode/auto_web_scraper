@@ -29,7 +29,7 @@ os.environ["NO_PROXY"] = "localhost,127.0.0.1,0.0.0.0"
 
 from database_supabase import db
 from harvester import harvest_and_save
-from pipeline_runner import process_video
+from pipeline_runner import process_video, process_backup_video
 from config import MAX_WORKERS, DEFAULT_MAX_PAGES, UPLOAD_PROVIDER
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -43,8 +43,10 @@ class PipelineState:
         self.discovery_running = False
         self.processing_running = False
         self.backfill_running = False
+        self.backup_running = False
         self.discovery_stats = {}
         self.processing_stats = {'completed': 0, 'failed': 0}
+        self.backup_stats = {'completed': 0, 'failed': 0}
         self.lock = threading.Lock()
     
     def set_discovery_running(self, running):
@@ -58,6 +60,10 @@ class PipelineState:
     def set_backfill_running(self, running):
         with self.lock:
             self.backfill_running = running
+            
+    def set_backup_running(self, running):
+        with self.lock:
+            self.backup_running = running
     
     def update_discovery_stats(self, stats):
         with self.lock:
@@ -66,6 +72,10 @@ class PipelineState:
     def update_processing_stats(self, completed, failed):
         with self.lock:
             self.processing_stats = {'completed': completed, 'failed': failed}
+            
+    def update_backup_stats(self, completed, failed):
+        with self.lock:
+            self.backup_stats = {'completed': completed, 'failed': failed}
     
     def get_state(self):
         with self.lock:
@@ -73,8 +83,10 @@ class PipelineState:
                 'discovery_running': self.discovery_running,
                 'processing_running': self.processing_running,
                 'backfill_running': self.backfill_running,
+                'backup_running': self.backup_running,
                 'discovery_stats': self.discovery_stats.copy(),
-                'processing_stats': self.processing_stats.copy()
+                'processing_stats': self.processing_stats.copy(),
+                'backup_stats': self.backup_stats.copy()
             }
 
 
@@ -206,12 +218,77 @@ def start_processing():
 
 def stop_processing():
     """Stop processing phase (non-blocking)."""
-    if not state.processing_running:
+    if not state.processing_running and not state.backup_running:
         return "⚠️ Processing is not currently running."
     
     import config
     config.STOP_PROCESSING = True
     return "🛑 Stop signal sent! Active worker tasks will finish their current video download/upload step, and then the pipeline will stop gracefully."
+
+
+def run_backup_processing_background(max_workers):
+    """Run backup uploads (Doodstream & Lulustream) in background thread."""
+    try:
+        state.set_backup_running(True)
+        import config
+        config.STOP_PROCESSING = False
+
+        missing_backup_urls = db.get_missing_backup_videos()
+        if not missing_backup_urls:
+            print("[BACKUP] No videos missing backup uploads!")
+            return
+
+        print(f"[BACKUP] Processing backup uploads for {len(missing_backup_urls)} videos")
+
+        completed = 0
+        failed = 0
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {executor.submit(process_backup_video, url): url for url in missing_backup_urls}
+
+            for future in as_completed(futures):
+                if getattr(config, "STOP_PROCESSING", False):
+                    print("[BACKUP] Stop requested!")
+                    break
+                try:
+                    future.result()
+                    completed += 1
+                except Exception as e:
+                    failed += 1
+                    print(f"[BACKUP] Error: {e}")
+
+                state.update_backup_stats(completed, failed)
+
+        print(f"[BACKUP] Complete: {completed} succeeded, {failed} failed")
+    except Exception as e:
+        print(f"[BACKUP] Fatal Error: {e}")
+    finally:
+        state.set_backup_running(False)
+
+
+def start_backup_processing():
+    """Start backup processing phase (non-blocking)."""
+    if state.backup_running:
+        return "⚠️ Backup processing already running. Please wait..."
+
+    if state.processing_running:
+        return "⚠️ Main processing is currently running. Please wait or stop main processing first."
+
+    import config
+    config.STOP_PROCESSING = False
+
+    missing_backup_urls = db.get_missing_backup_videos()
+    if not missing_backup_urls:
+        return "✅ All SeekStreaming videos already have Doodstream and LuluStream backup uploads!"
+
+    thread = threading.Thread(
+        target=run_backup_processing_background,
+        args=(MAX_WORKERS,),
+        daemon=True
+    )
+    thread.start()
+
+    return f"🛡️ Backup upload started for {len(missing_backup_urls)} videos (DoodStream & LuluStream) with {MAX_WORKERS} workers...\nCheck Hugging Face Space logs and live stats for progress."
 
 
 def change_upload_provider(provider):
@@ -495,6 +572,13 @@ def get_live_stats():
         else:
             stats_md += "🚀 **Processing Phase**: ⏸️ Idle\n"
         
+        backup_running = current_state.get('backup_running', False)
+        if backup_running:
+            b_stats = current_state.get('backup_stats', {'completed': 0, 'failed': 0})
+            stats_md += f"🛡️ **Backup Upload Phase**: ⏳ Running (✅ {b_stats['completed']:,} succeeded | ❌ {b_stats['failed']:,} failed)\n"
+        else:
+            stats_md += "🛡️ **Backup Upload Phase**: ⏸️ Idle\n"
+        
         return stats_md
     except Exception as e:
         return f"❌ Error fetching stats: {str(e)}"
@@ -518,7 +602,8 @@ with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
         # 🎬 Video Scraper Pipeline (Two-Phase Model)
         
         **Phase A:** Discovery - Harvester scans pages and seeds database  
-        **Phase B:** Processing - Workers download and sequentially upload videos to **SeekStreaming (Primary), Doodstream (Backup), and Lulustream (Backup)**  
+        **Phase B:** Processing - Workers download and upload videos to **SeekStreaming (Primary)**.  
+        **Backup Mode:** Optional button to upload missing backups to **Doodstream & Lulustream**.  
         
         **Database:** Supabase (PostgreSQL) - State persists across restarts  
         **Workers:** {workers} (Optimized for HF Spaces 16GB RAM)
@@ -558,12 +643,14 @@ with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
                         discovery_output = gr.Textbox(label="Discovery Status", lines=3, interactive=False)
                 
                         gr.Markdown("---")
-                        gr.Markdown("## 🚀 Phase B: Processing")
+                        gr.Markdown("## 🚀 Phase B: Processing & Backup Uploads")
                 
-                        gr.Markdown("ℹ️ **Multi-Upload Mode:** Videos will be sequentially uploaded to SeekStreaming (Primary), followed by Doodstream and Lulustream (Backups).")
+                        gr.Markdown("ℹ️ **Primary Upload (Mandatory):** Uploads to **SeekStreaming**. Once uploaded to SeekStreaming, status is saved as **COMPLETED**.")
+                        gr.Markdown("ℹ️ **Backup Uploads (Optional):** Uploads missing backups to **Doodstream & LuluStream**.")
                 
                         with gr.Row():
-                            processing_btn = gr.Button("🚀 Start Processing", variant="primary", size="lg")
+                            processing_btn = gr.Button("🚀 Start Processing (SeekStreaming)", variant="primary", size="lg")
+                            backup_btn = gr.Button("🛡️ Upload Missing Backups (Dood & Lulu)", variant="secondary", size="lg")
                             stop_btn = gr.Button("🛑 Stop Processing", variant="stop", size="lg")
                         processing_output = gr.Textbox(label="Processing Status", lines=3, interactive=False)
                 
@@ -593,6 +680,11 @@ with gr.Blocks(title="Video Scraper Pipeline", theme=gr.themes.Soft()) as app:
         
         processing_btn.click(
             fn=start_processing,
+            outputs=processing_output
+        )
+        
+        backup_btn.click(
+            fn=start_backup_processing,
             outputs=processing_output
         )
         

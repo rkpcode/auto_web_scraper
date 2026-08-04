@@ -257,6 +257,25 @@ class SupabaseManager:
             urls = [row[0] for row in cursor.fetchall()]
         
         return urls
+
+    def get_missing_backup_videos(self):
+        """
+        Get all URLs where SeekStreaming upload is completed (seekstreaming_id is NOT NULL or status='COMPLETED')
+        but DoodStream or LuluStream upload is missing (doodstream_id IS NULL OR lulustream_id IS NULL).
+        
+        Returns:
+            list: URLs to process for backup uploads
+        """
+        with self.get_cursor() as cursor:
+            cursor.execute("""
+                SELECT original_url 
+                FROM videos 
+                WHERE (seekstreaming_id IS NOT NULL OR status = 'COMPLETED')
+                  AND (doodstream_id IS NULL OR lulustream_id IS NULL)
+                ORDER BY created_at ASC
+            """)
+            urls = [row[0] for row in cursor.fetchall()]
+        return urls
     
     def get_video_status(self, url):
         """
