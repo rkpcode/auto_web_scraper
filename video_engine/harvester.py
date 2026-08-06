@@ -331,7 +331,9 @@ class SitemapHarvester(BaseHarvester):
         
         for sitemap_url in sitemap_urls:
             try:
-                response = requests.get(sitemap_url, timeout=10)
+                from core.utils import get_random_user_agent
+                headers = {'User-Agent': get_random_user_agent()}
+                response = requests.get(sitemap_url, headers=headers, timeout=15)
                 if response.status_code == 200:
                     logger.info(f"[HARVESTER] Found sitemap: {sitemap_url}")
                     
