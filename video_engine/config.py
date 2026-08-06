@@ -22,7 +22,7 @@ if "connect_timeout" not in DATABASE_URL:
 # ============================================================================
 # VIDEO UPLOAD PROVIDER CONFIGURATION
 # ============================================================================
-UPLOAD_PROVIDER = os.getenv("UPLOAD_PROVIDER", "doodstream").strip().lower()
+UPLOAD_PROVIDER = os.getenv("UPLOAD_PROVIDER", "seekstreaming").strip().lower()
 if UPLOAD_PROVIDER == "streamwish":
     UPLOAD_PROVIDER = "seekstreaming"
 
