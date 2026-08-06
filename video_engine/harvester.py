@@ -227,8 +227,10 @@ class LinkHarvester(BaseHarvester):
         consecutive_zero_pages = 0
         
         while page_num < end_page:
-            # URL Construction Logic - Prioritize WordPress style /page/n/
-            if '?' in self.base_url:
+            # URL Construction Logic
+            if page_num == 1:
+                current_page_url = self.base_url
+            elif '?' in self.base_url:
                 current_page_url = f"{self.base_url}&page={page_num}"
             else:
                 # viralkand.com usually uses /page/n/
